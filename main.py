@@ -254,6 +254,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch_size", type=float, default=512, help="train batch size"
     )
+    parser.add_argument(
+        "--only_rp", type=int, default=0, help="train with only rp model"
+    )
     parser.add_argument("--l2", type=float, default=0.0, help="l2 regularization param")
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
     parser.add_argument("--optimizer", type=str, default="adam", help="optimizer")
@@ -270,17 +273,18 @@ if __name__ == "__main__":
     cfg.train_config.optimizer = args.optimizer
 
     if args.model_name == "cl4kt":
-        cfg.cl4kt_config.reg_cl = args.reg_cl
-        cfg.cl4kt_config.mask_prob = args.mask_prob
-        cfg.cl4kt_config.crop_prob = args.crop_prob
-        cfg.cl4kt_config.permute_prob = args.permute_prob
-        cfg.cl4kt_config.replace_prob = args.replace_prob
-        cfg.cl4kt_config.negative_prob = args.negative_prob
-        cfg.cl4kt_config.dropout = args.dropout
-        cfg.cl4kt_config.l2 = args.l2
-    else:  # akt
-        cfg.akt_config.l2 = args.l2
-        cfg.akt_config.dropout = args.dropout
+        cfg.cl4kt_config["only_rp"] = args.only_rp
+        # cfg.cl4kt_config.reg_cl = args.reg_cl
+        # cfg.cl4kt_config.mask_prob = args.mask_prob
+        # cfg.cl4kt_config.crop_prob = args.crop_prob
+        # cfg.cl4kt_config.permute_prob = args.permute_prob
+        # cfg.cl4kt_config.replace_prob = args.replace_prob
+        # cfg.cl4kt_config.negative_prob = args.negative_prob
+        # cfg.cl4kt_config.dropout = args.dropout
+        # cfg.cl4kt_config.l2 = args.l2
+    # else:  # akt
+    #     cfg.akt_config.l2 = args.l2
+    #     cfg.akt_config.dropout = args.dropout
 
     cfg.freeze()
 
