@@ -78,8 +78,9 @@ def main(config):
 
     print("MODEL", model_name)
     print(dataset)
-
+    now = (datetime.now() + timedelta(hours=9)).strftime("%Y%m%d-%H%M%S") 
     for fold, (train_ids, test_ids) in enumerate(kfold.split(users)):
+        # if fold > 0 : break
         if model_name == "akt":
             model_config = config.akt_config
             if data_name in ["statics", "assistments15"]:
@@ -175,6 +176,7 @@ def main(config):
         model, opt = accelerator.prepare(model, opt)
 
         test_auc, test_acc, test_rmse = model_train(
+            now,
             fold,
             model,
             accelerator,
@@ -197,15 +199,16 @@ def main(config):
     test_rmse = np.mean(test_rmses)
     test_rmse_std = np.std(test_rmses)
 
-    now = (datetime.now() + timedelta(hours=9)).strftime("%Y%m%d-%H%M%S")  # KST time
+    print_args = model_config
+    print_args["Model"] = model_name
+    print_args["Dataset"] = data_name
+    print_args["auc"] = round(test_auc, 4)
+    print_args["acc"] = round(test_acc, 4)
+    print_args["rmse"] = round(test_rmse, 4)
 
-    log_out_path = os.path.join(
-        os.path.join("logs", "5-fold-cv", "{}".format(data_name))
-    )
-    os.makedirs(log_out_path, exist_ok=True)
-    with open(os.path.join(log_out_path, "{}-{}".format(model_name, now)), "w") as f:
-        f.write("AUC\tACC\tRMSE\n")
-        f.write("{:.5f}\t{:.5f}\t{:.5f}".format(test_auc, test_acc, test_rmse))
+    if model_name == "cl4kt":
+        logs_df = pd.DataFrame(print_args, index=[0],)
+        logs_df.to_csv('cl4kt_results.csv', mode='a', index=False, header=False)
 
     print("\n5-fold CV Result")
     print("AUC\tACC\tRMSE")
@@ -257,12 +260,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--only_rp", type=int, default=0, help="train with only rp model"
     )
+    parser.add_argument(
+        "--choose_cl", type=str, default="both", help="choose between q_cl and s_cl"
+    )
     parser.add_argument("--l2", type=float, default=0.0, help="l2 regularization param")
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
     parser.add_argument("--optimizer", type=str, default="adam", help="optimizer")
     args = parser.parse_args()
 
-    base_cfg_file = PathManager.open("configs/example.yaml", "r")
+    base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
     base_cfg = yaml.safe_load(base_cfg_file)
     cfg = CN(base_cfg)
     cfg.set_new_allowed(True)
@@ -273,12 +279,14 @@ if __name__ == "__main__":
     cfg.train_config.optimizer = args.optimizer
 
     if args.model_name == "cl4kt":
+        cfg.cl4kt_config = cfg.cl4kt_config[cfg.data_name]
         cfg.cl4kt_config["only_rp"] = args.only_rp
+        cfg.cl4kt_config["choose_cl"] = args.choose_cl
         # cfg.cl4kt_config.reg_cl = args.reg_cl
-        # cfg.cl4kt_config.mask_prob = args.mask_prob
-        # cfg.cl4kt_config.crop_prob = args.crop_prob
-        # cfg.cl4kt_config.permute_prob = args.permute_prob
-        # cfg.cl4kt_config.replace_prob = args.replace_prob
+        cfg.cl4kt_config.mask_prob = args.mask_prob
+        cfg.cl4kt_config.crop_prob = args.crop_prob
+        cfg.cl4kt_config.permute_prob = args.permute_prob
+        cfg.cl4kt_config.replace_prob = args.replace_prob
         # cfg.cl4kt_config.negative_prob = args.negative_prob
         # cfg.cl4kt_config.dropout = args.dropout
         # cfg.cl4kt_config.l2 = args.l2

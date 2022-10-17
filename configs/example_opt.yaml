@@ -1,0 +1,74 @@
+dataset_path: "./dataset"
+
+checkpoint_dir: .ckpts
+seed: 12405
+
+akt_config:
+  embedding_size: 64
+  num_blocks: 2
+  kq_same: True
+  model_type: "akt"
+  num_attn_heads: 8
+  final_fc_dim: 512
+  d_ff: 1024
+  l2: 0.0
+  dropout: 0.05
+  separate_qr: False
+  
+cl4kt_config:
+  algebra05:
+    hidden_size: 64
+    num_blocks: 2
+    num_attn_heads: 8
+    kq_same: True
+    final_fc_dim: 512
+    d_ff: 1024
+    l2: 0.0
+    dropout: 0.2
+    reg_cl: 0.1
+    mask_prob: 0.5
+    crop_prob: 0.5
+    permute_prob: 0.7
+    replace_prob: 0.3
+    negative_prob: 1.0
+    temp: 0.05
+    hard_negative_weight: 0.1
+
+  assistments09:
+    hidden_size: 64
+    num_blocks: 2
+    num_attn_heads: 8
+    kq_same: True
+    final_fc_dim: 512
+    d_ff: 1024
+    l2: 0.0
+    dropout: 0.2
+    reg_cl: 0.1
+    mask_prob: 0.5
+    crop_prob: 0.5
+    permute_prob: 0.7
+    replace_prob: 0.5
+    negative_prob: 1.0
+    temp: 0.05
+    hard_negative_weight: 0.1
+
+
+train_config:
+  log_wandb_fold: True
+  sequence_option: "recent" # early or recent
+  seq_len: 100
+  batch_size: 512
+  eval_batch_size: 512
+  num_epochs: 300
+  print_epochs: 1
+  max_grad_norm: 2.0
+  learning_rate: 0.001
+  optimizer: adam
+  
+  loss: BCE
+
+  ## Model Save
+  save_model: False
+  save_epochs: 1
+  save_model_name: "tmp"
+  log_path: "logs"

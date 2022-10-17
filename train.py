@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import os
 import glob
-
+import csv
 from datetime import datetime, timedelta
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, accuracy_score, mean_squared_error
@@ -13,6 +13,7 @@ if torch.cuda.is_available():
 
 
 def model_train(
+    time_now,
     fold,
     model,
     accelerator,
@@ -30,12 +31,11 @@ def model_train(
 
     logs_df = pd.DataFrame()
     num_epochs = config["train_config"]["num_epochs"]
+    # num_epochs = 1
     model_name = config["model_name"]
     data_name = config["data_name"]
     train_config = config["train_config"]
     log_path = train_config["log_path"]
-
-    now = (datetime.now() + timedelta(hours=9)).strftime("%Y%m%d-%H%M%S")  # KST time
 
     token_cnts = 0
     label_sums = 0
@@ -98,16 +98,19 @@ def model_train(
         if valid_auc > best_valid_auc:
 
             path = os.path.join(
-                os.path.join("saved_model", model_name, data_name), "params_*"
+                os.path.join("saved_model", model_name, data_name, time_now), "params_*"
             )
             for _path in glob.glob(path):
                 os.remove(_path)
             best_valid_auc = valid_auc
             best_epoch = i
+            dir_name = os.path.join("saved_model", model_name, data_name, time_now)
+            if not os.path.exists(dir_name):
+                os.makedirs(dir_name)
             torch.save(
                 {"epoch": i, "model_state_dict": model.state_dict(),},
                 os.path.join(
-                    os.path.join("saved_model", model_name, data_name),
+                    os.path.join("saved_model", model_name, data_name, time_now),
                     "params_{}".format(str(best_epoch)),
                 ),
             )
@@ -149,7 +152,7 @@ def model_train(
         )
     checkpoint = torch.load(
         os.path.join(
-            os.path.join("saved_model", model_name, data_name),
+            os.path.join("saved_model", model_name, data_name, time_now),
             "params_{}".format(str(best_epoch)),
         )
     )
@@ -187,18 +190,18 @@ def model_train(
         )
     )
 
-    logs_df = logs_df.append(
-        pd.DataFrame(
-            {"EarlyStopEpoch": best_epoch, "auc": auc, "acc": acc, "rmse": rmse},
-            index=[0],
-        ),
-        sort=False,
-    )
+    # logs_df = logs_df.append(
+    #     pd.DataFrame(
+    #         {"EarlyStopEpoch": best_epoch, "auc": auc, "acc": acc, "rmse": rmse},
+    #         index=[0],
+    #     ),
+    #     sort=False,
+    # )
 
-    log_out_path = os.path.join(log_path, data_name)
-    os.makedirs(log_out_path, exist_ok=True)
-    logs_df.to_csv(
-        os.path.join(log_out_path, "{}_{}.csv".format(model_name, now)), index=False
-    )
+    # log_out_path = os.path.join(log_path, data_name)
+    # os.makedirs(log_out_path, exist_ok=True)
+    # logs_df.to_csv(
+    #     os.path.join(log_out_path, "{}_{}.csv".format(model_name, now)), index=False
+    # )
 
     return auc, acc, rmse

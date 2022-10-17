@@ -43,6 +43,7 @@ class CL4KT(Module):
         self.negative_prob = self.args["negative_prob"]
         self.hard_negative_weight = self.args["hard_negative_weight"]
         self.only_rp = self.args["only_rp"]
+        self.choose_cl = self.args["choose_cl"]
 
         self.question_embed = Embedding(
             self.num_skills + 2, self.hidden_size, padding_idx=0
@@ -129,97 +130,102 @@ class CL4KT(Module):
                 inter_i_score, inter_j_score = inter_i_embed, inter_j_embed
 
                 # BERT
-                for block in self.question_encoder:
-                    ques_i_score, _ = block(
-                        mask=2,
-                        query=ques_i_score,
-                        key=ques_i_score,
-                        values=ques_i_score,
-                        apply_pos=False,
-                    )
-                    ques_j_score, _ = block(
-                        mask=2,
-                        query=ques_j_score,
-                        key=ques_j_score,
-                        values=ques_j_score,
-                        apply_pos=False,
-                    )
-
-                for block in self.interaction_encoder:
-                    inter_i_score, _ = block(
-                        mask=2,
-                        query=inter_i_score,
-                        key=inter_i_score,
-                        values=inter_i_score,
-                        apply_pos=False,
-                    )
-                    inter_j_score, _ = block(
-                        mask=2,
-                        query=inter_j_score,
-                        key=inter_j_score,
-                        values=inter_j_score,
-                        apply_pos=False,
-                    )
-                    if self.negative_prob > 0:
-                        inter_k_score, _ = block(
+                if self.choose_cl in ["q_cl", "both"]:
+                    for block in self.question_encoder:
+                        ques_i_score, _ = block(
                             mask=2,
-                            query=inter_k_embed,
-                            key=inter_k_embed,
-                            values=inter_k_embed,
+                            query=ques_i_score,
+                            key=ques_i_score,
+                            values=ques_i_score,
                             apply_pos=False,
                         )
+                        ques_j_score, _ = block(
+                            mask=2,
+                            query=ques_j_score,
+                            key=ques_j_score,
+                            values=ques_j_score,
+                            apply_pos=False,
+                        )
+                if self.choose_cl in ["s_cl", "both"]:
+                    for block in self.interaction_encoder:
+                        inter_i_score, _ = block(
+                            mask=2,
+                            query=inter_i_score,
+                            key=inter_i_score,
+                            values=inter_i_score,
+                            apply_pos=False,
+                        )
+                        inter_j_score, _ = block(
+                            mask=2,
+                            query=inter_j_score,
+                            key=inter_j_score,
+                            values=inter_j_score,
+                            apply_pos=False,
+                        )
+                        if self.negative_prob > 0:
+                            inter_k_score, _ = block(
+                                mask=2,
+                                query=inter_k_embed,
+                                key=inter_k_embed,
+                                values=inter_k_embed,
+                                apply_pos=False,
+                            )
+                if self.choose_cl in ["q_cl", "both"]:
+                    pooled_ques_i_score = (ques_i_score * attention_mask_i.unsqueeze(-1)).sum(
+                        1
+                    ) / attention_mask_i.sum(-1).unsqueeze(-1)
+                    pooled_ques_j_score = (ques_j_score * attention_mask_j.unsqueeze(-1)).sum(
+                        1
+                    ) / attention_mask_j.sum(-1).unsqueeze(-1)
 
-                pooled_ques_i_score = (ques_i_score * attention_mask_i.unsqueeze(-1)).sum(
-                    1
-                ) / attention_mask_i.sum(-1).unsqueeze(-1)
-                pooled_ques_j_score = (ques_j_score * attention_mask_j.unsqueeze(-1)).sum(
-                    1
-                ) / attention_mask_j.sum(-1).unsqueeze(-1)
-
-                ques_cos_sim = self.sim(
-                    pooled_ques_i_score.unsqueeze(1), pooled_ques_j_score.unsqueeze(0)
-                )
-                # Hard negative should be added
-
-                ques_labels = torch.arange(ques_cos_sim.size(0)).long().to(q_i.device)
-                question_cl_loss = self.cl_loss_fn(ques_cos_sim, ques_labels)
-                # question_cl_loss = torch.mean(question_cl_loss)
-
-                pooled_inter_i_score = (inter_i_score * attention_mask_i.unsqueeze(-1)).sum(
-                    1
-                ) / attention_mask_i.sum(-1).unsqueeze(-1)
-                pooled_inter_j_score = (inter_j_score * attention_mask_j.unsqueeze(-1)).sum(
-                    1
-                ) / attention_mask_j.sum(-1).unsqueeze(-1)
-
-                inter_cos_sim = self.sim(
-                    pooled_inter_i_score.unsqueeze(1), pooled_inter_j_score.unsqueeze(0)
-                )
-
-                if self.negative_prob > 0:
-                    pooled_inter_k_score = (
-                        inter_k_score * attention_mask.unsqueeze(-1)
-                    ).sum(1) / attention_mask.sum(-1).unsqueeze(-1)
-                    neg_inter_cos_sim = self.sim(
-                        pooled_inter_i_score.unsqueeze(1), pooled_inter_k_score.unsqueeze(0)
+                    ques_cos_sim = self.sim(
+                        pooled_ques_i_score.unsqueeze(1), pooled_ques_j_score.unsqueeze(0)
                     )
-                    inter_cos_sim = torch.cat([inter_cos_sim, neg_inter_cos_sim], 1)
+                    # Hard negative should be added
 
-                inter_labels = torch.arange(inter_cos_sim.size(0)).long().to(q_i.device)
+                    ques_labels = torch.arange(ques_cos_sim.size(0)).long().to(q_i.device)
+                    question_cl_loss = self.cl_loss_fn(ques_cos_sim, ques_labels)
+                    # question_cl_loss = torch.mean(question_cl_loss)
+                else: 
+                    question_cl_loss = 0
+                if self.choose_cl in ["s_cl", "both"]:
+                    pooled_inter_i_score = (inter_i_score * attention_mask_i.unsqueeze(-1)).sum(
+                        1
+                    ) / attention_mask_i.sum(-1).unsqueeze(-1)
+                    pooled_inter_j_score = (inter_j_score * attention_mask_j.unsqueeze(-1)).sum(
+                        1
+                    ) / attention_mask_j.sum(-1).unsqueeze(-1)
 
-                if self.negative_prob > 0:
-                    weights = torch.tensor(
-                        [
-                            [0.0] * (inter_cos_sim.size(-1) - neg_inter_cos_sim.size(-1))
-                            + [0.0] * i
-                            + [self.hard_negative_weight]
-                            + [0.0] * (neg_inter_cos_sim.size(-1) - i - 1)
-                            for i in range(neg_inter_cos_sim.size(-1))
-                        ]
-                    ).to(q_i.device)
-                    inter_cos_sim = inter_cos_sim + weights
+                    inter_cos_sim = self.sim(
+                        pooled_inter_i_score.unsqueeze(1), pooled_inter_j_score.unsqueeze(0)
+                    )
 
-                interaction_cl_loss = self.cl_loss_fn(inter_cos_sim, inter_labels)
+                    if self.negative_prob > 0:
+                        pooled_inter_k_score = (
+                            inter_k_score * attention_mask.unsqueeze(-1)
+                        ).sum(1) / attention_mask.sum(-1).unsqueeze(-1)
+                        neg_inter_cos_sim = self.sim(
+                            pooled_inter_i_score.unsqueeze(1), pooled_inter_k_score.unsqueeze(0)
+                        )
+                        inter_cos_sim = torch.cat([inter_cos_sim, neg_inter_cos_sim], 1)
+
+                    inter_labels = torch.arange(inter_cos_sim.size(0)).long().to(q_i.device)
+
+                    if self.negative_prob > 0:
+                        weights = torch.tensor(
+                            [
+                                [0.0] * (inter_cos_sim.size(-1) - neg_inter_cos_sim.size(-1))
+                                + [0.0] * i
+                                + [self.hard_negative_weight]
+                                + [0.0] * (neg_inter_cos_sim.size(-1) - i - 1)
+                                for i in range(neg_inter_cos_sim.size(-1))
+                            ]
+                        ).to(q_i.device)
+                        inter_cos_sim = inter_cos_sim + weights
+
+                    interaction_cl_loss = self.cl_loss_fn(inter_cos_sim, inter_labels)
+                else: 
+                    interaction_cl_loss = 0 
             else: 
                 question_cl_loss, interaction_cl_loss = 0, 0
         else:
@@ -245,7 +251,6 @@ class CL4KT(Module):
         retrieved_knowledge = torch.cat([x, q_embed], dim=-1)
 
         output = torch.sigmoid(self.out(retrieved_knowledge)).squeeze()
-
         total_cl_loss = question_cl_loss + interaction_cl_loss
 
         if self.training:
