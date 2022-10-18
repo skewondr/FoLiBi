@@ -50,7 +50,7 @@ cl4kt_config:
     replace_prob: 0.5
     negative_prob: 1.0
     temp: 0.05
-    hard_negative_weight: 0.1
+    hard_negative_weight: 1.0
 
 
 train_config:

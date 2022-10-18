@@ -287,7 +287,7 @@ if __name__ == "__main__":
         cfg.cl4kt_config.crop_prob = args.crop_prob
         cfg.cl4kt_config.permute_prob = args.permute_prob
         cfg.cl4kt_config.replace_prob = args.replace_prob
-        # cfg.cl4kt_config.negative_prob = args.negative_prob
+        cfg.cl4kt_config.negative_prob = args.negative_prob
         # cfg.cl4kt_config.dropout = args.dropout
         # cfg.cl4kt_config.l2 = args.l2
     # else:  # akt
