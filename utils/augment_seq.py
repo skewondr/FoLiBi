@@ -185,12 +185,14 @@ def augment_kt_seqs(
         masked_s_seq = masked_s_seq[start_pos : start_pos + crop_seq_len]
         masked_r_seq = masked_r_seq[start_pos : start_pos + crop_seq_len]
 
-    pad_len = seq_len - len(masked_q_seq)
-
-    attention_mask = [0] * pad_len + [1] * len(masked_s_seq)
-    masked_q_seq = [0] * pad_len + masked_q_seq
-    masked_s_seq = [0] * pad_len + masked_s_seq
-    masked_r_seq = [-1] * pad_len + masked_r_seq
+        pad_len = seq_len - len(masked_q_seq)
+        attention_mask = [0] * pad_len + [1] * len(masked_s_seq)
+        masked_q_seq = [0] * pad_len + masked_q_seq
+        masked_s_seq = [0] * pad_len + masked_s_seq
+        masked_r_seq = [-1] * pad_len + masked_r_seq
+    else: 
+        pad_len = seq_len - true_seq_len
+        attention_mask = [0] * pad_len + [1] * true_seq_len
 
     return masked_q_seq, masked_s_seq, masked_r_seq, negative_r_seq, attention_mask
 
