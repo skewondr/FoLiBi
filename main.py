@@ -28,10 +28,10 @@ def main(config):
 
     tm = localtime(time.time())
     params_str = f'{tm.tm_mon}{tm.tm_mday}{tm.tm_hour}{tm.tm_min}{tm.tm_sec}'
-
-    wandb.init(project="MKT_grad", entity="skewondr")
-    wandb.run.name = params_str
-    wandb.run.save()
+    if config.use_wandb:
+        wandb.init(project="MKT_grad", entity="skewondr")
+        wandb.run.name = params_str
+        wandb.run.save()
 
     accelerator = Accelerator()
     device = accelerator.device
@@ -222,7 +222,8 @@ def main(config):
     print_args["acc"] = round(test_acc, 4)
     print_args["rmse"] = round(test_rmse, 4)
     print_args["describe"] = train_config.describe
-    wandb.log(print_args)
+    if config.use_wandb:
+        wandb.log(print_args)
 
     if model_name == "cl4kt":
         logs_df = pd.DataFrame(print_args, index=[0],)
@@ -290,6 +291,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--describe", type=str, default="default"
     )
+    parser.add_argument(
+        "--use_wandb", type=int, default=1
+    )
     parser.add_argument("--l2", type=float, default=0.0, help="l2 regularization param")
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
     parser.add_argument("--optimizer", type=str, default="adam", help="optimizer")
@@ -301,6 +305,7 @@ if __name__ == "__main__":
     cfg.set_new_allowed(True)
     cfg.model_name = args.model_name
     cfg.data_name = args.data_name
+    cfg.use_wandb = args.use_wandb
     cfg.train_config.batch_size = int(args.batch_size)
     cfg.train_config.learning_rate = args.lr
     cfg.train_config.optimizer = args.optimizer
