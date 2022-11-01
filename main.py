@@ -318,7 +318,7 @@ if __name__ == "__main__":
         # cfg.cl4kt_config.negative_prob = args.negative_prob
         # cfg.cl4kt_config.dropout = args.dropout
         # cfg.cl4kt_config.l2 = args.l2
-    if args.model_name == "cl4kt":
+    elif args.model_name == "akt":
         cfg.akt_config = cfg.akt_config[cfg.data_name]
     #     cfg.akt_config.l2 = args.l2
     #     cfg.akt_config.dropout = args.dropout

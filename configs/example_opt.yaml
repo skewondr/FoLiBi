@@ -4,7 +4,7 @@ checkpoint_dir: .ckpts
 seed: 12405
 
 akt_config:
-  algebra05: #
+  algebra05: 
     embedding_size: 64
     num_blocks: 2
     kq_same: True
@@ -16,7 +16,7 @@ akt_config:
     reg_l: 1
     separate_qr: False
 
-  assistments09: #
+  assistments09: 
     embedding_size: 64
     num_blocks: 2
     kq_same: True
@@ -28,7 +28,7 @@ akt_config:
     reg_l: 1
     separate_qr: False
 
-  bridge06: #
+  bridge06: 
     embedding_size: 64
     num_blocks: 2
     kq_same: True
@@ -40,7 +40,7 @@ akt_config:
     reg_l: 10
     separate_qr: False
 
-  slepemapy: #
+  slepemapy: 
     embedding_size: 64
     num_blocks: 2
     kq_same: True
@@ -53,7 +53,7 @@ akt_config:
     separate_qr: False
   
 cl4kt_config:
-  algebra05: #
+  algebra05: 
     hidden_size: 64
     num_blocks: 2
     num_attn_heads: 8
@@ -70,7 +70,7 @@ cl4kt_config:
     temp: 0.05
     hard_negative_weight: 0.1
 
-  assistments09: #
+  assistments09: 
     hidden_size: 64
     num_blocks: 2
     num_attn_heads: 8
@@ -87,7 +87,7 @@ cl4kt_config:
     temp: 0.05
     hard_negative_weight: 1.0
 
-  bridge06: #
+  bridge06: 
     hidden_size: 64
     num_blocks: 2
     num_attn_heads: 8
