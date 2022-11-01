@@ -14,7 +14,7 @@ import time
 
 # Please specify your dataset Path
 BASE_PATH = "./dataset"
-
+np.random.seed(12405)
 
 def prepare_assistments(
     data_name: str, min_user_inter_num: int, remove_nan_skills: bool
@@ -365,7 +365,7 @@ def prepare_sampled_slepemapy(min_user_inter_num):
     This is forked from:
     https://github.com/THUwangcy/HawkesKT/blob/main/data/Preprocess.ipynb
     """
-    data_path = os.path.join(BASE_PATH, "sampled_slepemapy")
+    data_path = os.path.join(BASE_PATH, "slepemapy")
     data_df_cz = pd.read_csv(os.path.join(data_path, "answer.csv"), sep=";")
 
     # 1. place_answered is NaN
@@ -440,6 +440,102 @@ def prepare_sampled_slepemapy(min_user_inter_num):
         os.path.join(data_path, "preprocessed_df.csv"), sep="\t", index=False
     )
 
+def prepare_sampled_ednet(min_user_inter_num, kc_col_name, remove_nan_skills):
+    #follow KDDCup10
+    import re
+    from tqdm import tqdm
+    from IPython import embed 
+    # timestamp,solving_id,question_id,user_answer,elapsed_time 
+    # user_id	item_id	timestamp	correct	skill_id
+    df_path = os.path.join(os.path.join(BASE_PATH, "EdNet/EdNet-KT1/KT1/"))
+    user_path_list = os.listdir(df_path)
+    print(f"total_user:{len(user_path_list)}") #784,309
+    user_path_list = np.random.choice(user_path_list, 10000, replace=False)
+
+    content_path = os.path.join(os.path.join(BASE_PATH, "EdNet/EdNet-Contents/contents/questions.csv"))
+    content_df = pd.read_csv(content_path)
+
+    df = pd.DataFrame()
+    count = 0 
+    for idx, user_path in enumerate(tqdm(user_path_list, total=len(user_path_list), ncols=50)):
+        try:
+            u_df = pd.read_csv(os.path.join(df_path, user_path), encoding = 'ISO-8859-1', dtype=str)
+            if len(u_df) < min_user_inter_num : continue 
+            if count >= 5000 : break
+            else: count += 1
+            uid = user_path.split('/')[-1]
+            uid = int(re.sub(r'[^0-9]', '', uid))
+            #get user_id
+            u_df["user_id"] = uid
+            df = pd.concat([df, u_df])
+        except:
+            continue
+    all_questions = content_df["question_id"]
+    user_questions = df["question_id"]
+    df = df[user_questions.isin(all_questions)].dropna()
+    #get skill_id
+    skill_df = pd.merge(df, content_df.loc[:,["question_id", "correct_answer", "tags"]], how='outer', on="question_id").dropna()
+    
+    #get correct
+    actual_ans = skill_df["correct_answer"].values
+    user_ans = skill_df["user_answer"].values
+    df['correct'] = np.array(actual_ans == user_ans).astype(int)
+
+    #get item_id
+    df["item_id"] = df["question_id"].str.extract(r'(\d+)')
+
+    # Extract KCs
+    kc_list = []
+    for kc_str in skill_df["tags"].unique():
+        for kc in kc_str.split(";"):
+            kc_list.append(kc)
+    kc_set = set(kc_list)
+    kc2idx = {kc: i for i, kc in enumerate(kc_set)}
+
+    # Adujust dtypes
+    df = df.astype(
+        {"correct": np.float64, "timestamp": np.float64}
+    )
+
+    # user, item, skill re-index
+    df["user_id"] = np.unique(df["user_id"], return_inverse=True)[1]
+    df["item_id"] = np.unique(df["item_id"], return_inverse=True)[1]
+    df['skill_id'] = skill_df["tags"].values
+    
+    print("# Users: {}".format(df["user_id"].nunique()))
+    print("# Skills: {}".format(len(kc2idx)))
+    print("# Items: {}".format(df["item_id"].nunique()))
+    print("# Interactions: {}".format(len(df)))
+
+    # Build Q-matrix
+    Q_mat = np.zeros((len(df["item_id"].unique()), len(kc_set)))
+    for item_id, kc_str in df[["item_id", "skill_id"]].values:
+        for kc in kc_str.split(";"):
+            Q_mat[item_id, kc2idx[kc]] = 1
+
+    # Get unique skill id from combination of all skill ids
+    unique_skill_ids = np.unique(Q_mat, axis=0, return_inverse=True)[1]
+    df["skill_id"] = unique_skill_ids[df["item_id"]]
+
+    print("# Preprocessed Skills: {}".format(df["skill_id"].nunique()))
+
+    # Sort data temporally
+    df.drop_duplicates(subset=["user_id", "item_id", "timestamp"], inplace=True)
+    df.sort_values(by="timestamp", inplace=True)
+
+    # Sort data by users, preserving temporal order for each user
+    data_path = os.path.join(BASE_PATH, "EdNet/")
+    df = pd.concat([u_df for _, u_df in df.groupby("user_id")])
+    df.to_csv(os.path.join(data_path, "original_df.csv"), sep="\t", index=False)
+
+    # Save data
+    with open(os.path.join(data_path, "question_skill_rel.pkl"), "wb") as f:
+        pickle.dump(csr_matrix(Q_mat), f)
+    sparse.save_npz(os.path.join(data_path, "q_mat.npz"), csr_matrix(Q_mat))
+    
+    df = df[["user_id", "item_id", "timestamp", "correct", "skill_id"]]
+    df.reset_index(inplace=True, drop=True)
+    df.to_csv(os.path.join(data_path, "preprocessed_df.csv"), sep="\t", index=False)
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Preprocess DKT datasets")
@@ -481,4 +577,10 @@ if __name__ == "__main__":
         prepare_sampled_slepemapy(args.min_user_inter_num)
     elif args.data_name == "statics":
         prepare_statics()
+    elif args.data_name == "ednet":
+        prepare_sampled_ednet(
+            min_user_inter_num=args.min_user_inter_num,
+            kc_col_name="tags",
+            remove_nan_skills=args.remove_nan_skills,
+        )
 
