@@ -23,7 +23,7 @@ class AKT(Module):
         num_attn_heads=8,
         final_fc_dim=512,
         d_ff=2048,
-        l2=1e-5,
+        reg_l=1e-5,
         dropout=0.2,
         separate_qr=False,
     ):
@@ -53,7 +53,7 @@ class AKT(Module):
         self.num_attn_heads = num_attn_heads
         self.final_fc_dim = final_fc_dim
         self.d_ff = d_ff
-        self.l2 = l2
+        self.reg_l = reg_l
         self.dropout = dropout
         self.separate_qr = separate_qr
 
@@ -136,7 +136,7 @@ class AKT(Module):
                     qr_embed_diff_data + q_embed_diff_data
                 )
 
-            c_reg_loss = torch.mean(pid_embed_data ** 2.0) * self.l2
+            c_reg_loss = torch.mean(pid_embed_data ** 2.0) * self.reg_l
         else:
             c_reg_loss = 0
 

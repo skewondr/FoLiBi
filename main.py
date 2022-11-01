@@ -20,8 +20,19 @@ from datetime import datetime, timedelta
 from utils.config import ConfigNode as CN
 from utils.file_io import PathManager
 from stat_data import get_stat
+import wandb 
+import time 
+from time import localtime 
 
 def main(config):
+
+    tm = localtime(time.time())
+    params_str = f'{tm.tm_mon}{tm.tm_mday}{tm.tm_hour}{tm.tm_min}{tm.tm_sec}'
+
+    wandb.init(project="MKT_grad", entity="skewondr")
+    wandb.run.name = params_str
+    wandb.run.save()
+
     accelerator = Accelerator()
     device = accelerator.device
 
@@ -96,6 +107,9 @@ def main(config):
             permute_prob = model_config.permute_prob
             replace_prob = model_config.replace_prob
             negative_prob = model_config.negative_prob
+
+        print(train_config)
+        print(model_config)
 
         train_users = users[train_ids]
         np.random.shuffle(train_users)
@@ -173,7 +187,7 @@ def main(config):
         if optimizer == "sgd":
             opt = SGD(model.parameters(), learning_rate, momentum=0.9)
         elif optimizer == "adam":
-            opt = Adam(model.parameters(), learning_rate, weight_decay=model_config.l2)
+            opt = Adam(model.parameters(), learning_rate, weight_decay=train_config.l2)
 
         model, opt = accelerator.prepare(model, opt)
 
@@ -201,12 +215,14 @@ def main(config):
     test_rmse = np.mean(test_rmses)
     test_rmse_std = np.std(test_rmses)
 
-    print_args = model_config
+    print_args = model_config.copy()
     print_args["Model"] = model_name
     print_args["Dataset"] = data_name
     print_args["auc"] = round(test_auc, 4)
     print_args["acc"] = round(test_acc, 4)
     print_args["rmse"] = round(test_rmse, 4)
+    print_args["describe"] = train_config.describe
+    wandb.log(print_args)
 
     if model_name == "cl4kt":
         logs_df = pd.DataFrame(print_args, index=[0],)
@@ -239,6 +255,12 @@ if __name__ == "__main__":
         default=0.1,
         help="regularization parameter contrastive learning loss",
     )
+    parser.add_argument(
+        "--reg_l",
+        type=float,
+        default=0.1,
+        help="regularization parameter learning loss",
+    )
     parser.add_argument("--mask_prob", type=float, default=0.2, help="mask probability")
     parser.add_argument("--crop_prob", type=float, default=0.3, help="crop probability")
     parser.add_argument(
@@ -265,6 +287,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--choose_cl", type=str, default="both", help="choose between q_cl and s_cl"
     )
+    parser.add_argument(
+        "--describe", type=str, default="default"
+    )
     parser.add_argument("--l2", type=float, default=0.0, help="l2 regularization param")
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
     parser.add_argument("--optimizer", type=str, default="adam", help="optimizer")
@@ -279,6 +304,7 @@ if __name__ == "__main__":
     cfg.train_config.batch_size = int(args.batch_size)
     cfg.train_config.learning_rate = args.lr
     cfg.train_config.optimizer = args.optimizer
+    cfg.train_config.describe = args.describe
 
     if args.model_name == "cl4kt":
         cfg.cl4kt_config = cfg.cl4kt_config[cfg.data_name]
@@ -292,11 +318,11 @@ if __name__ == "__main__":
         # cfg.cl4kt_config.negative_prob = args.negative_prob
         # cfg.cl4kt_config.dropout = args.dropout
         # cfg.cl4kt_config.l2 = args.l2
-    # else:  # akt
+    if args.model_name == "cl4kt":
+        cfg.akt_config = cfg.akt_config[cfg.data_name]
     #     cfg.akt_config.l2 = args.l2
     #     cfg.akt_config.dropout = args.dropout
 
     cfg.freeze()
 
-    print(cfg)
     main(cfg)

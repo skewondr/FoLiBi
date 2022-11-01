@@ -37,7 +37,6 @@ class CL4KT(Module):
         self.kq_same = self.args["kq_same"]
         self.final_fc_dim = self.args["final_fc_dim"]
         self.d_ff = self.args["d_ff"]
-        self.l2 = self.args["l2"]
         self.dropout = self.args["dropout"]
         self.reg_cl = self.args["reg_cl"]
         self.negative_prob = self.args["negative_prob"]

@@ -4,26 +4,62 @@ checkpoint_dir: .ckpts
 seed: 12405
 
 akt_config:
-  embedding_size: 64
-  num_blocks: 2
-  kq_same: True
-  model_type: "akt"
-  num_attn_heads: 8
-  final_fc_dim: 512
-  d_ff: 1024
-  l2: 0.0
-  dropout: 0.05
-  separate_qr: False
+  algebra05: #
+    embedding_size: 64
+    num_blocks: 2
+    kq_same: True
+    model_type: "akt"
+    num_attn_heads: 8
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.05
+    reg_l: 1
+    separate_qr: False
+
+  assistments09: #
+    embedding_size: 64
+    num_blocks: 2
+    kq_same: True
+    model_type: "akt"
+    num_attn_heads: 8
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.2
+    reg_l: 1
+    separate_qr: False
+
+  bridge06: #
+    embedding_size: 64
+    num_blocks: 2
+    kq_same: True
+    model_type: "akt"
+    num_attn_heads: 8
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.2
+    reg_l: 10
+    separate_qr: False
+
+  slepemapy: #
+    embedding_size: 64
+    num_blocks: 2
+    kq_same: True
+    model_type: "akt"
+    num_attn_heads: 8
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.2
+    reg_l: 10
+    separate_qr: False
   
 cl4kt_config:
-  algebra05:
+  algebra05: #
     hidden_size: 64
     num_blocks: 2
     num_attn_heads: 8
     kq_same: True
     final_fc_dim: 512
     d_ff: 1024
-    l2: 0.0
     dropout: 0.2
     reg_cl: 0.1
     mask_prob: 0.5
@@ -34,14 +70,13 @@ cl4kt_config:
     temp: 0.05
     hard_negative_weight: 0.1
 
-  assistments09:
+  assistments09: #
     hidden_size: 64
     num_blocks: 2
     num_attn_heads: 8
     kq_same: True
     final_fc_dim: 512
     d_ff: 1024
-    l2: 0.0
     dropout: 0.2
     reg_cl: 0.1
     mask_prob: 0.5
@@ -52,26 +87,26 @@ cl4kt_config:
     temp: 0.05
     hard_negative_weight: 1.0
 
-  slepemapy:
+  bridge06: #
     hidden_size: 64
     num_blocks: 2
     num_attn_heads: 8
     kq_same: True
     final_fc_dim: 512
     d_ff: 1024
-    l2: 0.0
     dropout: 0.2
     reg_cl: 0.1
-    mask_prob: 0.5
+    mask_prob: 0.3
     crop_prob: 0.3
-    permute_prob: 0.5
+    permute_prob: 0.3
     replace_prob: 0.5
     negative_prob: 1.0
     temp: 0.05
-    hard_negative_weight: 1.0
+    hard_negative_weight: 0.5
 
 
 train_config:
+  l2: 0.0
   log_wandb_fold: True
   sequence_option: "recent" # early or recent
   seq_len: 100
