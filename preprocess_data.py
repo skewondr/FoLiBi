@@ -447,12 +447,12 @@ def prepare_sampled_ednet(min_user_inter_num, kc_col_name, remove_nan_skills):
     from IPython import embed 
     # timestamp,solving_id,question_id,user_answer,elapsed_time 
     # user_id	item_id	timestamp	correct	skill_id
-    df_path = os.path.join(os.path.join(BASE_PATH, "EdNet/EdNet-KT1/KT1/"))
+    df_path = os.path.join(os.path.join(BASE_PATH, "ednet/EdNet-KT1/KT1/"))
     user_path_list = os.listdir(df_path)
     print(f"total_user:{len(user_path_list)}") #784,309
-    user_path_list = np.random.choice(user_path_list, 10000, replace=False)
+    np.random.shuffle(user_path_list)
 
-    content_path = os.path.join(os.path.join(BASE_PATH, "EdNet/EdNet-Contents/contents/questions.csv"))
+    content_path = os.path.join(os.path.join(BASE_PATH, "ednet/EdNet-Contents/contents/questions.csv"))
     content_df = pd.read_csv(content_path)
 
     df = pd.DataFrame()
@@ -524,7 +524,7 @@ def prepare_sampled_ednet(min_user_inter_num, kc_col_name, remove_nan_skills):
     df.sort_values(by="timestamp", inplace=True)
 
     # Sort data by users, preserving temporal order for each user
-    data_path = os.path.join(BASE_PATH, "EdNet/")
+    data_path = os.path.join(BASE_PATH, "ednet/")
     df = pd.concat([u_df for _, u_df in df.groupby("user_id")])
     df.to_csv(os.path.join(data_path, "original_df.csv"), sep="\t", index=False)
 
