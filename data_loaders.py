@@ -211,6 +211,9 @@ class MostRecentQuestionSkillDataset(Dataset):
         self.padded_qd = torch.full(
             (len(self.questions), self.seq_len), -1, dtype=torch.float
         )
+        self.position = torch.full(
+            (len(self.questions), self.seq_len), 0, dtype=torch.long
+        )
 
         for i, elem in enumerate(zip(self.questions, self.skills, self.responses)):
             q, s, r = elem
@@ -222,6 +225,7 @@ class MostRecentQuestionSkillDataset(Dataset):
             self.attention_mask[i, -len(s) :] = torch.ones(len(s), dtype=torch.long)
             self.padded_sd[i, -len(s) :] = torch.tensor(sd, dtype=torch.float)
             self.padded_qd[i, -len(q) :] = torch.tensor(qd, dtype=torch.float)
+            self.position[i, -len(s) :] = torch.arange(1, len(s)+1, dtype=torch.long)
 
     def __getitem__(self, index):
 
@@ -231,7 +235,8 @@ class MostRecentQuestionSkillDataset(Dataset):
             "responses": self.padded_r[index],
             "attention_mask": self.attention_mask[index],
             "qdiff": self.padded_qd[index],
-            "sdiff": self.padded_sd[index],
+            "qdiff": self.padded_qd[index],
+            "position": self.position[index],
         }
 
     def __len__(self):

@@ -13,6 +13,7 @@ from data_loaders import (
     SimCLRDatasetWrapper,
 )
 from models.akt import AKT
+from models.sakt import SAKT
 from models.cl4kt import CL4KT
 from train import model_train
 from sklearn.model_selection import KFold
@@ -107,6 +108,9 @@ def main(config):
             permute_prob = model_config.permute_prob
             replace_prob = model_config.replace_prob
             negative_prob = model_config.negative_prob
+        elif args.model_name == "sakt":
+            model_config = config.sakt_config
+            model = SAKT(device, num_skills, num_questions, seq_len, **model_config)
 
         print(train_config)
         print(model_config)
@@ -327,6 +331,8 @@ if __name__ == "__main__":
         cfg.akt_config = cfg.akt_config[cfg.data_name]
     #     cfg.akt_config.l2 = args.l2
     #     cfg.akt_config.dropout = args.dropout
+    elif args.model_name == "sakt":
+        cfg.akt_config = cfg.akt_config
 
     cfg.freeze()
 
