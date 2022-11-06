@@ -24,7 +24,7 @@ class SAKT(Module):
         super().__init__()
         self.device = device 
 
-        self.num_questions = num_questions
+        self.num_skills = num_skills
         self.seq_len = seq_len
         self.embedding_size = embedding_size
         self.num_attn_heads = num_attn_heads
@@ -32,9 +32,9 @@ class SAKT(Module):
         self.num_blocks = num_blocks
         self.loss_fn = BCELoss(reduction="mean")
 
-        # num_questions, seq_len, embedding_size, num_attn_heads, dropout, emb_path="")
-        self.interaction_emb = Embedding(num_questions * 2, embedding_size, padding_idx=0)
-        self.exercise_emb = Embedding(num_questions, embedding_size, padding_idx=0)
+        # num_skills, seq_len, embedding_size, num_attn_heads, dropout, emb_path="")
+        self.interaction_emb = Embedding(num_skills * 2, embedding_size, padding_idx=0)
+        self.exercise_emb = Embedding(num_skills, embedding_size, padding_idx=0)
         # self.P = Parameter(torch.Tensor(self.seq_len, self.embedding_size))
         self.position_emb = Embedding(seq_len + 1, embedding_size, padding_idx=0)
 
@@ -45,7 +45,7 @@ class SAKT(Module):
 
     def base_emb(self, q, r, qry, pos):
         masked_responses = r * (r > -1).long()
-        x = q + self.num_questions * masked_responses
+        x = q + self.num_skills * masked_responses
         qshftemb, xemb = self.exercise_emb(qry), self.interaction_emb(x)
         posemb = self.position_emb(pos)
         xemb = xemb + posemb

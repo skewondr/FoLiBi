@@ -234,7 +234,7 @@ class MostRecentQuestionSkillDataset(Dataset):
             "skills": self.padded_s[index],
             "responses": self.padded_r[index],
             "attention_mask": self.attention_mask[index],
-            "qdiff": self.padded_qd[index],
+            "sdiff": self.padded_sd[index],
             "qdiff": self.padded_qd[index],
             "position": self.position[index],
         }
