@@ -5,10 +5,8 @@ data=(algebra05 assistments09)
 
 for d in ${data[@]}; do
     args=(
-        --model_name cl4kt
+        --model_name sakt
         --data_name ${d}
-        --only_rp 1
-        --describe rp
     )
     echo `CUDA_VISIBLE_DEVICES=0 python main.py ${args[@]}`
 done

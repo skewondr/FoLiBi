@@ -5,10 +5,29 @@ seed: 12405
 
 
 sakt_config:
-  embedding_size: 64
-  num_blocks: 2
-  num_attn_heads: 8
-  dropout: 0.5
+  algebra05: 
+    embedding_size: 64
+    num_blocks: 1
+    num_attn_heads: 8
+    dropout: 0.5
+
+  assistments09: 
+    embedding_size: 64
+    num_blocks: 1
+    num_attn_heads: 8
+    dropout: 0.5
+
+  bridge06: 
+    embedding_size: 64
+    num_blocks: 1
+    num_attn_heads: 8
+    dropout: 0.5
+
+  slepemapy: 
+    embedding_size: 64
+    num_blocks: 1
+    num_attn_heads: 8
+    dropout: 0.2
 
 akt_config:
   algebra05: 

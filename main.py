@@ -332,7 +332,7 @@ if __name__ == "__main__":
     #     cfg.akt_config.l2 = args.l2
     #     cfg.akt_config.dropout = args.dropout
     elif args.model_name == "sakt":
-        cfg.akt_config = cfg.akt_config
+        cfg.sakt_config = cfg.sakt_config
 
     cfg.freeze()
 
