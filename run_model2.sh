@@ -7,7 +7,7 @@ for d in ${data[@]}; do
     args=(
         --model_name sakt
         --data_name ${d}
-        --describe default_opt
+        --describe full_len
     )
     echo `CUDA_VISIBLE_DEVICES=1 python main.py ${args[@]}`
 done

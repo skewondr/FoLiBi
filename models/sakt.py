@@ -52,23 +52,22 @@ class SAKT(Module):
         return qshftemb, xemb
 
     def forward(self, feed_dict):
-        q = feed_dict["skills"][:, :-1]
-        r = feed_dict["responses"][:, :-1]
-        qry = feed_dict["skills"][:, 1:]
-        pos = feed_dict["position"][:, :-1]
+        q = feed_dict["skills"]
+        r = feed_dict["responses"]
+        qry = feed_dict["skills"]
+        pos = feed_dict["position"]
         qshftemb, xemb = self.base_emb(q, r, qry, pos)
         for i in range(self.num_blocks):
             xemb = self.blocks[i](qshftemb, xemb, xemb)
 
         p = torch.sigmoid(self.pred(self.dropout_layer(xemb))).squeeze(-1)
         out_dict = {
-            "pred": p,
-            "true": r.float(),
+            "pred": p[:, 1:],
+            "true": r[:, 1:].float(),
         }
         return out_dict
 
     def loss(self, feed_dict, out_dict):
-        # from IPython import embed ; embed()
         pred = out_dict["pred"].flatten()
         true = out_dict["true"].flatten()
         mask = true > -1

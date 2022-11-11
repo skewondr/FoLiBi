@@ -6,7 +6,7 @@ seed: 12405
 
 sakt_config:
     embedding_size: 64
-    num_blocks: 1
+    num_blocks: 2
     num_attn_heads: 8
     dropout: 0.5
 
