@@ -14,6 +14,7 @@ from data_loaders import (
 )
 from models.akt import AKT
 from models.sakt import SAKT
+from models.saint import SAINT
 from models.cl4kt import CL4KT
 from train import model_train
 from sklearn.model_selection import KFold
@@ -111,6 +112,9 @@ def main(config):
         elif args.model_name == "sakt":
             model_config = config.sakt_config
             model = SAKT(device, num_skills, num_questions, seq_len, **model_config)
+        elif args.model_name == "saint":
+            model_config = config.saint_config
+            model = SAINT(device, num_skills, num_questions, seq_len, **model_config)
 
         print(train_config)
         print(model_config)
