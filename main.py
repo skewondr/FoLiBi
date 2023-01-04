@@ -58,7 +58,7 @@ def main(config):
     tm = localtime(time.time())
     params_str = f'{tm.tm_mon}{tm.tm_mday}{tm.tm_hour}{tm.tm_min}{tm.tm_sec}'
     if config.use_wandb:
-        wandb.init(project="MKT_grad", entity="skewondr")
+        wandb.init(project="SIGIR", entity="skewondr")
         wandb.run.name = params_str
         wandb.run.save()
 
@@ -128,7 +128,7 @@ def main(config):
             model_config = config.akt_config
             if data_name in ["statics", "assistments15"]:
                 num_questions = 0
-            model = AKT(num_skills, num_questions, seq_len, **model_config)
+            model = AKT(device, num_skills, num_questions, seq_len, **model_config)
         elif model_name == "cl4kt":
             model_config = config.cl4kt_config
             model = CL4KT(device, num_skills, num_questions, seq_len, **model_config)
