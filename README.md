@@ -8,14 +8,16 @@
 
 ## 1. mask_cl : RDEMKT 성능확인 branch  
 <RDEMKT>
+    
 ```
 CUDA_VISIBLE_DEVICES=0 python main.py --model_name cloze --data_name algebra05 --use_wandb 0
 ```     
     
 ## 2. mask_cl : RDEKT 성능확인 branch  
 <RDEKT>
+    
 ```
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name cloze --data_name algebra05 --use_wandb 0
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name cloze --data_name algebra05 --use_wandb 0 --only_rp 1
 ```     
 
 ## 3. only_rp : 다른 KT 모델들 성능 확인 branch 
