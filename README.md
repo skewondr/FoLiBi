@@ -3,24 +3,21 @@
 
 
 
-# branch별 명령어
+
 #### 모든 모델,데이터별 hyper-parameter는 configs/example_opt.yaml을 확인하세요. 
 
-## 1. mask_cl : RDEMKT 성능확인 branch  
-<RDEMKT>
-    
+## 1.  제안 모델 성능확인  
 ```
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name cloze --data_name algebra05 --use_wandb 0
-```     
-    
-## 2. mask_cl : RDEKT 성능확인 branch  
-<RDEKT>
-    
-```
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name cloze --data_name algebra05 --use_wandb 0 --only_rp 1
+#RDEMKT
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name rdemkt --data_name algebra05 --use_wandb 0
+#RDEKT
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name rdemkt --data_name algebra05 --use_wandb 0 --only_rp 1
 ```     
 
-## 3. only_rp : 다른 KT 모델들 성능 확인 branch 
+## 2. 다른 KT 모델들 성능 확인 
 ```
 CUDA_VISIBLE_DEVICES=0 python main.py --model_name sakt --data_name algebra05  --use_wandb 0
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name akt --data_name algebra05  --use_wandb 0
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name saint --data_name algebra05  --use_wandb 0
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name cl4kt --data_name algebra05  --use_wandb 0
 ```
