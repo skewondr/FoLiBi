@@ -59,6 +59,7 @@ class SimCLRDatasetWrapper(Dataset):
                 "skills": s_seq,
                 "responses": r_seq,
                 "attention_mask": attention_mask,
+                "sdiff": original_data["sdiff"],
             }
 
         else:
@@ -118,6 +119,7 @@ class SimCLRDatasetWrapper(Dataset):
                 "skills": (aug_s_seq_1, aug_s_seq_2, s_seq),
                 "responses": (aug_r_seq_1, aug_r_seq_2, r_seq, negative_r_seq),
                 "attention_mask": (attention_mask_1, attention_mask_2, attention_mask),
+                "sdiff": original_data["sdiff"],
             }
             return ret
 

@@ -131,7 +131,7 @@ def main(config):
             model = AKT(num_skills, num_questions, seq_len, **model_config)
         elif model_name == "cl4kt":
             model_config = config.cl4kt_config
-            model = CL4KT(num_skills, num_questions, seq_len, **model_config)
+            model = CL4KT(device, num_skills, num_questions, seq_len, **model_config)
             mask_prob = model_config.mask_prob
             crop_prob = model_config.crop_prob
             permute_prob = model_config.permute_prob
