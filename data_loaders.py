@@ -322,19 +322,18 @@ class MostRecentQuestionSkillDataset(Dataset):
             (len(self.questions), self.seq_len), 0, dtype=torch.long
         )
 
-        for i, elem in enumerate(zip(self.questions, self.skills, self.responses)):
-            q, s, r = elem
-            sd = self.sdiff_array[s]
-            qd = self.qdiff_array[q]
-            self.padded_q[i, -len(q) :] = torch.tensor(q, dtype=torch.long)
-            self.padded_s[i, -len(s) :] = torch.tensor(s, dtype=torch.long)
-            self.padded_r[i, -len(r) :] = torch.tensor(r, dtype=torch.long)
-            self.attention_mask[i, -len(s) :] = torch.ones(len(s), dtype=torch.long)
-            self.padded_sd[i, -len(s) :] = torch.tensor(sd, dtype=torch.float)
-            self.padded_qd[i, -len(q) :] = torch.tensor(qd, dtype=torch.float)
-            self.position[i, -len(s) :] = torch.arange(1, len(s)+1, dtype=torch.long)
-
     def __getitem__(self, index):
+        
+        q, s, r = self.questions[index], self.skills[index], self.responses[index]
+        sd = self.sdiff_array[s]
+        qd = self.qdiff_array[q]
+        self.padded_q[index, -len(q) :] = torch.tensor(q, dtype=torch.long)
+        self.padded_s[index, -len(s) :] = torch.tensor(s, dtype=torch.long)
+        self.padded_r[index, -len(r) :] = torch.tensor(r, dtype=torch.long)
+        self.attention_mask[index, -len(s) :] = torch.ones(len(s), dtype=torch.long)
+        self.padded_sd[index, -len(s) :] = torch.tensor(sd, dtype=torch.float)
+        self.padded_qd[index, -len(q) :] = torch.tensor(qd, dtype=torch.float)
+        self.position[index, -len(s) :] = torch.arange(1, len(s)+1, dtype=torch.long)
 
         return {
             "questions": self.padded_q[index],

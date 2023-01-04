@@ -169,7 +169,12 @@ def main(config):
 
         train_dataset = dataset(train_df, seq_len, num_skills, num_questions)
         valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions)
+        valid_dataset.sdiff_array = train_dataset.sdiff_array
+        valid_dataset.qdiff_array = train_dataset.qdiff_array
         test_dataset = dataset(test_df, seq_len, num_skills, num_questions)
+        test_dataset.sdiff_array = train_dataset.sdiff_array
+        test_dataset.qdiff_array = train_dataset.qdiff_array
+
 
         print("train_ids", len(train_users))
         print("valid_ids", len(valid_users))
