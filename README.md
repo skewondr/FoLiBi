@@ -12,7 +12,7 @@
 CUDA_VISIBLE_DEVICES=0 python main.py --model_name cloze --data_name algebra05 --use_wandb 0
 ```     
     
-## 2. rotary_cl : RDEKT 성능확인 branch  
+## 2. mask_cl : RDEKT 성능확인 branch  
 <RDEKT>
 ```
 CUDA_VISIBLE_DEVICES=0 python main.py --model_name cloze --data_name algebra05 --use_wandb 0
