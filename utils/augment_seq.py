@@ -196,6 +196,65 @@ def augment_kt_seqs(
 
     return masked_q_seq, masked_s_seq, masked_r_seq, negative_r_seq, attention_mask
 
+def mask_kt_seqs(
+    aug_flag,
+    diff_index,
+    q_seq,
+    s_seq,
+    r_seq,
+    qdiff,
+    sdiff,
+    q_mask_id,
+    s_mask_id,
+    seq_len,
+    seed=None,
+    skill_rel=None,
+):
+    # masking (random or PMI 등을 활용해서)
+    # 구글 논문의 Correlated Feature Masking 등...
+    rng = random.Random(seed)
+    np.random.seed(seed)
+    
+    pos_idx, neg_idx = diff_index
+
+    masked_q_seq = np.array(q_seq[:])
+    masked_s_seq = np.array(s_seq[:])
+    masked_r_seq = np.array(r_seq[:])
+    mqdiff_seq = np.array(qdiff[:])
+    msdiff_seq = np.array(sdiff[:])
+    
+    true_seq_len = np.sum(np.asarray(q_seq) != 0)
+    if aug_flag == "mask":
+        masked_q_seq[pos_idx] = q_mask_id
+        masked_s_seq[pos_idx] = s_mask_id
+        masked_r_seq[pos_idx] = -1
+        mqdiff_seq[pos_idx] = 0
+        msdiff_seq[pos_idx] = 0
+
+        pad_len = seq_len - true_seq_len
+        attention_mask = np.array([0] * pad_len + [1] * true_seq_len)
+        attention_mask[neg_idx] = 0
+        attention_mask_neg = np.array([0] * pad_len + [1] * true_seq_len)
+        attention_mask_neg[pos_idx] = 0
+      
+    if aug_flag == "crop":
+        masked_q_seq = [v for i, v in enumerate(masked_q_seq) if i in pos_idx]
+        masked_s_seq = [v for i, v in enumerate(masked_s_seq) if i in pos_idx]
+        masked_r_seq = [v for i, v in enumerate(masked_r_seq) if i in pos_idx]
+        mqdiff_seq = [v for i, v in enumerate(mqdiff_seq) if i in pos_idx]
+        msdiff_seq = [v for i, v in enumerate(msdiff_seq) if i in pos_idx]
+
+        pad_len = seq_len - len(masked_q_seq)
+        attention_mask = [0] * pad_len + [1] * len(masked_s_seq)
+        attention_mask_neg = attention_mask
+        masked_q_seq = [0] * pad_len + masked_q_seq
+        masked_s_seq = [0] * pad_len + masked_s_seq
+        masked_r_seq = [-1] * pad_len + masked_r_seq
+        mqdiff_seq = [-1] * pad_len + mqdiff_seq
+        msdiff_seq = [-1] * pad_len + msdiff_seq
+
+    return masked_q_seq, masked_s_seq, masked_r_seq, attention_mask, attention_mask_neg, mqdiff_seq, msdiff_seq
+
 
 def preprocess_qr(questions, responses, seq_len, pad_val=-1):
     """

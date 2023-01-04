@@ -5,11 +5,14 @@ from utils.augment_seq import (
     preprocess_qsr,
     augment_kt_seqs,
     replace_only,
+    mask_kt_seqs,
 )
 import torch
 from collections import defaultdict
 from IPython import embed
 import numpy as np
+import random 
+import math 
 
 class SimCLRDatasetWrapper(Dataset):
     def __init__(
@@ -56,8 +59,6 @@ class SimCLRDatasetWrapper(Dataset):
                 "skills": s_seq,
                 "responses": r_seq,
                 "attention_mask": attention_mask,
-                "qdiff": original_data["qdiff"],
-                "sdiff": original_data["sdiff"],
             }
 
         else:
@@ -117,15 +118,121 @@ class SimCLRDatasetWrapper(Dataset):
                 "skills": (aug_s_seq_1, aug_s_seq_2, s_seq),
                 "responses": (aug_r_seq_1, aug_r_seq_2, r_seq, negative_r_seq),
                 "attention_mask": (attention_mask_1, attention_mask_2, attention_mask),
-                "qdiff": original_data["qdiff"],
-                "sdiff": original_data["sdiff"],
             }
             return ret
 
     def __getitem__(self, index):
         return self.__getitem_internal__(index)
 
+class MKMDatasetWrapper(Dataset):
+    def __init__(
+        self,
+        diff_order: str,
+        ds: Dataset,
+        seq_len: int,
+        mask_prob: float,
+        eval_mode=False,
+    ):
+        super().__init__()
+        self.ds = ds
+        self.seq_len = seq_len
+        self.mask_prob = mask_prob
+        self.eval_mode = eval_mode
 
+        self.num_questions = self.ds.num_questions
+        self.num_skills = self.ds.num_skills
+        self.q_mask_id = self.num_questions + 1
+        self.s_mask_id = self.num_skills + 1
+        self.diff_order = diff_order
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __getitem_internal__(self, index):
+        original_data = self.ds[index]
+        q_seq = original_data["questions"]
+        s_seq = original_data["skills"]
+        r_seq = original_data["responses"]
+        attention_mask = original_data["attention_mask"]
+
+        if self.eval_mode:
+            return {
+                "questions": q_seq,
+                "skills": s_seq,
+                "responses": r_seq,
+                "attention_mask": attention_mask,
+                "qdiff": original_data["qdiff"],
+                "sdiff": original_data["sdiff"],
+            }
+
+        else:
+            q_seq_list = original_data["questions"].tolist()
+            s_seq_list = original_data["skills"].tolist()
+            r_seq_list = original_data["responses"].tolist()
+            qdiff_list = original_data["qdiff"].tolist()
+            sdiff_list = original_data["sdiff"].tolist()
+            qdiff_array = self.ds.qdiff_array
+            sdiff_array = self.ds.sdiff_array
+            
+            rng = random.Random(index)
+            
+            true_seq_len = np.sum(np.asarray(q_seq_list) != 0)
+            if self.diff_order.startswith("asc"):
+                pos_index = sorted(range(len(sdiff_list)-true_seq_len, len(sdiff_list)), key=lambda k: sdiff_list[k])
+            elif self.diff_order == "des":
+                pos_index = sorted(range(len(sdiff_list)-true_seq_len, len(sdiff_list)), key=lambda k: sdiff_list[k], reverse=True)
+            elif self.diff_order == "random":
+                pos_index = list(range(len(sdiff_list)-true_seq_len, len(sdiff_list)))
+                rng.shuffle(pos_index)
+            elif self.diff_order == "chunk":
+                pos_index = list(range(len(sdiff_list)-true_seq_len, len(sdiff_list)))
+
+            crop_seq_len = max(1, math.floor(self.mask_prob * true_seq_len))
+            if self.diff_order in ["chunk", "asc_chunk"]:
+                start_idx = rng.randint(0, true_seq_len - crop_seq_len) #include index true_seq_len - crop_seq_len
+            else: 
+                start_idx = 0
+
+            pos_index = pos_index[start_idx : start_idx + crop_seq_len]
+            neg_index = list(set(range(len(sdiff_list)-true_seq_len, len(sdiff_list)))-set(pos_index))
+            diff_index = (pos_index, neg_index)
+            
+            t1 = mask_kt_seqs(
+                "mask",
+                diff_index,
+                q_seq_list,
+                s_seq_list,
+                r_seq_list,
+                qdiff_list,
+                sdiff_list,
+                self.q_mask_id,
+                self.s_mask_id,
+                self.seq_len,
+                seed=index,
+            )
+
+            aug_q_seq_1, aug_s_seq_1, aug_r_seq_1, attention_mask_1, attention_mask_neg, qdiff_1, sdiff_1 = t1
+            aug_q_seq_1 = torch.tensor(aug_q_seq_1, dtype=torch.long)
+            aug_s_seq_1 = torch.tensor(aug_s_seq_1, dtype=torch.long)
+            aug_r_seq_1 = torch.tensor(aug_r_seq_1, dtype=torch.long)
+            aug_qd_seq_1 = torch.tensor(qdiff_1, dtype=torch.float)
+            aug_sd_seq_1 = torch.tensor(sdiff_1, dtype=torch.float)
+            attention_mask_1 = torch.tensor(attention_mask_1, dtype=torch.long)
+            attention_mask_neg = torch.tensor(attention_mask_neg, dtype=torch.long)
+
+            ret = {
+                "questions": (aug_q_seq_1, q_seq),
+                "skills": (aug_s_seq_1, s_seq),
+                "responses": (aug_r_seq_1, r_seq),
+                "attention_mask": (attention_mask_1, attention_mask, attention_mask_neg),
+                "qdiff": (aug_qd_seq_1, original_data["qdiff"]),
+                "sdiff": (aug_sd_seq_1, original_data["sdiff"]),
+            }
+            return ret
+
+    def __getitem__(self, index):
+        return self.__getitem_internal__(index)
+    
 class MostRecentQuestionSkillDataset(Dataset):
     def __init__(self, df, seq_len, num_skills, num_questions):
         self.df = df

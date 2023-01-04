@@ -70,9 +70,14 @@ class AKT(Module):
         self.q_embed = Embedding(
             self.num_skills, self.embedding_size, padding_idx=0
         )  # c_{c_t}
-        self.qr_embed = Embedding(
-            2 * self.num_skills, self.embedding_size, padding_idx=0
-        )  # e_{(c_t, r_t)}
+        if self.separate_qr:
+            self.qr_embed = Embedding(
+                2 * self.num_skills, self.embedding_size, padding_idx=0
+            )  # e_{(c_t, r_t)}
+        else:
+            self.r_embed = Embedding(
+                2 + 1, self.embedding_size, padding_idx=0
+            )  # e_{(c_t, r_t)} 
 
         self.model = Architecture(
             n_question=self.num_skills,
@@ -110,13 +115,14 @@ class AKT(Module):
         masked_r = r * (r > -1).long()
         pid_data = feed_dict["questions"]
 
-        qr = q + self.num_skills * masked_r
-
         q_embed_data = self.q_embed(q)  # c_{c_t}: [batch_size, seq_len, embedding_size]
-        qr_embed_data = self.qr_embed(
-            qr
-        )  # f_{(c_t, r_t)}: [batch_size, seq_len, d_model]
-
+        if self.separate_qr:
+            qr = q + self.num_skills * masked_r
+            qr_embed_data = self.qr_embed(qr)  # f_{(c_t, r_t)}: [batch_size, seq_len, d_model]
+        else:
+            qr = masked_r
+            qr_embed_data = q_embed_data + self.r_embed(qr)
+            
         if self.num_questions > 0:
             q_embed_diff_data = self.q_embed_diff(q)  # d_{c_t}: variation vector
             pid_embed_data = self.difficult_param(pid_data)  # \mu_{q_t}

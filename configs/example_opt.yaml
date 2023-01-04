@@ -133,6 +133,67 @@ cl4kt_config:
     negative_prob: 1.0
     temp: 0.05
     hard_negative_weight: 0.5
+  
+rdemkt_config:
+  algebra05: 
+    hidden_size: 64
+    num_blocks: 2
+    num_attn_heads: 8
+    kq_same: True
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.2
+    mask_prob: 0.1
+    temp: 0.05
+    inter_lambda: 0.1
+    ques_lambda: 0
+    choose_cl: "both"
+    only_rp: 0
+
+  assistments09: 
+    hidden_size: 64
+    num_blocks: 2
+    num_attn_heads: 8
+    kq_same: True
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.2
+    mask_prob: 0.9
+    temp: 0.05
+    inter_lambda: 0.01
+    ques_lambda: 0.01
+    choose_cl: "both"
+    only_rp: 0
+
+  bridge06: 
+    hidden_size: 64
+    num_blocks: 2
+    num_attn_heads: 8
+    kq_same: True
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.2
+    mask_prob: 0.3
+    temp: 0.05
+    inter_lambda: 0.01
+    ques_lambda: 0.01
+    choose_cl: "both"
+    only_rp: 0
+
+  slepemapy: 
+    hidden_size: 64
+    num_blocks: 2
+    num_attn_heads: 8
+    kq_same: True
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.2
+    mask_prob: 0.7
+    temp: 0.05
+    inter_lambda: 0.01
+    ques_lambda: 1.0
+    choose_cl: "both"
+    only_rp: 0
 
 train_config:
   l2: 0.0
@@ -146,6 +207,7 @@ train_config:
   max_grad_norm: 2.0
   learning_rate: 0.001
   optimizer: adam
+  diff_order: "random"
   
   loss: BCE
 

@@ -17,10 +17,16 @@ from torch.nn.init import constant_
 import torch.nn.functional as F
 import numpy as np
 from enum import IntEnum
+from .rpe import RotaryPositionalEmbeddings
+from IPython import embed 
+import math 
 
+from torch.nn import Module, Embedding, Linear, Dropout, MaxPool1d, Sequential, ReLU
+import copy
+import pandas as pd
 
 class CL4KTTransformerLayer(Module):
-    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same):
+    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, rotary="none"):
         super(CL4KTTransformerLayer, self).__init__()
         """
             This is a Basic Block of Transformer paper.
@@ -30,7 +36,7 @@ class CL4KTTransformerLayer(Module):
         kq_same = kq_same == 1
         # Multi-Head Attention Block
         self.masked_attn_head = MultiHeadAttentionWithIndividualFeatures(
-            d_model, d_feature, n_heads, dropout, kq_same=kq_same
+            d_model, d_feature, n_heads, dropout, kq_same=kq_same, rotary=rotary
         )
 
         # Two layer norm and two dropout layers
@@ -45,7 +51,7 @@ class CL4KTTransformerLayer(Module):
         self.layer_norm2 = LayerNorm(d_model)
         self.dropout2 = Dropout(dropout)
 
-    def forward(self, mask, query, key, values, apply_pos=True):
+    def forward(self, mask, query, key, values, diff=None, apply_pos=True):
         """
         Input:
             block: object of type BasicBlock(nn.Module). It contains maksed_attn_head objects which is of type MultiHeadAttnetion(nn.Module).
@@ -100,11 +106,11 @@ class CL4KTTransformerLayer(Module):
         bert_mask = torch.ones_like(src_mask).bool()
 
         if mask == 0:
-            query2, attn = self.masked_attn_head(query, key, values, mask=src_mask)
+            query2, attn = self.masked_attn_head(query, key, values, diff=diff, mask=src_mask)
         elif mask == 1:
-            query2, attn = self.masked_attn_head(query, key, values, mask=src_mask)
+            query2, attn = self.masked_attn_head(query, key, values, diff=diff, mask=src_mask)
         else:  # mask == 2
-            query2, attn = self.masked_attn_head(query, key, values, mask=bert_mask)
+            query2, attn = self.masked_attn_head(query, key, values, diff=diff, mask=bert_mask)
 
         query = query + self.dropout1((query2))  # residual connection
         query = self.layer_norm1(query)
@@ -118,7 +124,7 @@ class CL4KTTransformerLayer(Module):
 
 
 class AKTTransformerLayer(Module):
-    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same):
+    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, rotary="none"):
         super(AKTTransformerLayer, self).__init__()
         """
             This is a Basic Block of Transformer paper.
@@ -128,7 +134,7 @@ class AKTTransformerLayer(Module):
         kq_same = kq_same == 1
         # Multi-Head Attention Block
         self.masked_attn_head = MultiHeadAttentionWithContextDistance(
-            d_model, d_feature, n_heads, dropout, kq_same=kq_same
+            d_model, d_feature, n_heads, dropout, kq_same=kq_same, rotary=rotary
         )
 
         # Two layer norm and two dropout layers
@@ -143,7 +149,7 @@ class AKTTransformerLayer(Module):
         self.layer_norm2 = LayerNorm(d_model)
         self.dropout2 = Dropout(dropout)
 
-    def forward(self, mask, query, key, values, apply_pos=True):
+    def forward(self, mask, query, key, values, diff=None, apply_pos=True):
         """
         Input:
             block: object of type BasicBlock(nn.Module). It contains maksed_attn_head objects which is of type MultiHeadAttnetion(nn.Module).
@@ -197,9 +203,9 @@ class AKTTransformerLayer(Module):
         src_mask = (torch.from_numpy(nopeek_mask) == 0).to(device)
 
         if mask == 0:
-            query2, attn = self.masked_attn_head(query, key, values, mask=src_mask)
+            query2, attn = self.masked_attn_head(query, key, values, diff=diff, mask=src_mask)
         elif mask == 1:
-            query2, attn = self.masked_attn_head(query, key, values, mask=src_mask)
+            query2, attn = self.masked_attn_head(query, key, values, diff=diff, mask=src_mask)
         else:  # mask == 2
             raise NotImplementedError
 
@@ -215,13 +221,12 @@ class AKTTransformerLayer(Module):
 
 
 class MultiHeadAttentionWithIndividualFeatures(Module):
-    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, bias=True):
+    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, rotary="none", bias=True):
         super(MultiHeadAttentionWithIndividualFeatures, self).__init__()
         """
         It has projection layer for getting keys, queries, and values. Followed by attention and a connected layer.
         """
 
-        # d_feature=d_model // n_heads
         self.d_model = d_model
         self.d_k = d_feature
         self.h = n_heads
@@ -235,6 +240,11 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
         self.proj_bias = bias
         self.out_proj = Linear(d_model, d_model, bias=bias)
         self.gammas = Parameter(torch.zeros(n_heads, 1, 1))
+        
+        self.rotary = rotary
+        if self.rotary in "qkv":
+            self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
+
         xavier_uniform_(self.gammas)
 
         self._reset_parameters()
@@ -252,7 +262,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
                 constant_(self.q_linear.bias, 0.0)
             constant_(self.out_proj.bias, 0.0)
 
-    def forward(self, q, k, v, mask):
+    def forward(self, q, k, v, mask, diff=None):
         bs = q.size(0)
 
         # perform linear operation and split into h heads
@@ -267,6 +277,12 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
         k = k.transpose(1, 2)
         q = q.transpose(1, 2)
         v = v.transpose(1, 2)
+
+        if self.rotary in "qkv" and diff is not None:
+            k = self.rpe(k, diff) # [batch_size, head, len_k,  head_dim]
+            q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
+            if "v" in self.rotary :
+                v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
 
         # calculate attention using function we will define next
         gammas = self.gammas
@@ -285,7 +301,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
 
 
 class MultiHeadAttentionWithContextDistance(Module):
-    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, bias=True):
+    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, rotary="none", bias=True):
         super(MultiHeadAttentionWithContextDistance, self).__init__()
         """
         It has projection layer for getting keys, queries, and values. Followed by attention and a connected layer.
@@ -305,6 +321,11 @@ class MultiHeadAttentionWithContextDistance(Module):
         self.proj_bias = bias
         self.out_proj = Linear(d_model, d_model, bias=bias)
         self.gammas = Parameter(torch.zeros(n_heads, 1, 1))
+
+        self.rotary = rotary
+        if self.rotary in "qkv":
+            self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
+
         xavier_uniform_(self.gammas)
 
         self._reset_parameters()
@@ -322,7 +343,7 @@ class MultiHeadAttentionWithContextDistance(Module):
                 constant_(self.q_linear.bias, 0.0)
             constant_(self.out_proj.bias, 0.0)
 
-    def forward(self, q, k, v, mask):
+    def forward(self, q, k, v, mask, diff=None):
         bs = q.size(0)
 
         # perform linear operation and split into h heads
@@ -337,6 +358,12 @@ class MultiHeadAttentionWithContextDistance(Module):
         k = k.transpose(1, 2)
         q = q.transpose(1, 2)
         v = v.transpose(1, 2)
+
+        if self.rotary in "qkv" and diff is not None:
+            k = self.rpe(k, diff) # [batch_size, head, len_k,  head_dim]
+            q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
+            if "v" in self.rotary :
+                v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
 
         # calculate attention using function we will define next
         gammas = self.gammas
@@ -531,16 +558,76 @@ class BERTEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
+class MultiHeadAttention_Rotary(nn.Module):
+    """
+    ## Multi-head attention with rotary positional embeddings
+    We override [multi-head attention from original transformer](../mha.html).
+    """
+    def __init__(self, d_model: int, heads: int, dropout: float, rotary:str, bias=True, device=None):
+        super().__init__()
 
-import torch
-from torch import nn
-from torch.nn import Module, Embedding, Linear, Dropout, MaxPool1d, Sequential, ReLU
-import copy
-import pandas as pd
-import numpy as np
-import torch
-import torch.nn.functional as F
+        self.num_heads = heads
+        self.head_dim = d_model // heads
+        self.proj_bias = bias
+        self.d_model = d_model
+        self.query = nn.Linear(d_model, d_model, bias=bias)
+        self.key = nn.Linear(d_model, d_model, bias=bias)
+        self.value = nn.Linear(d_model, d_model, bias=bias)
+        self.dropout = nn.Dropout(dropout)
+        self.out_proj = nn.Linear(d_model, d_model, bias=bias)
+        self.rotary=rotary
+        # self.masked_attn_head = MultiHeadAttentionWithIndividualFeatures(
+        #     self.d_model, self.head_dim, self.num_heads, dropout, kq_same=False, rotary=self.rotary
+        # )
+        if self.rotary in "qkv":
+            self.rpe = RotaryPositionalEmbeddings(self.head_dim)
 
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        xavier_uniform_(self.query.weight)
+        xavier_uniform_(self.key.weight)
+        xavier_uniform_(self.value.weight)
+
+        if self.proj_bias:
+            constant_(self.query.bias, 0.)
+            constant_(self.key.bias, 0.)
+            constant_(self.value.bias, 0.)
+            constant_(self.out_proj.bias, 0.)
+
+    def forward(self, q, k, v, diff, mask = None):
+        # return self.masked_attn_head(q, k, v, diff, mask)
+
+        batch_size = q.size(0)
+        q = self.query(q).view(batch_size, -1, self.num_heads, self.head_dim)
+        k = self.key(k).view(batch_size, -1, self.num_heads, self.head_dim)
+        v = self.value(v).view(batch_size, -1, self.num_heads, self.head_dim)
+
+        k = k.transpose(1, 2)
+        q = q.transpose(1, 2)
+        v = v.transpose(1, 2)
+
+        if self.rotary in "qkv" and diff is not None:
+            k = self.rpe(k, diff) # [batch_size, head, len_k,  head_dim]
+            q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
+            if "v" in self.rotary :
+                v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
+
+        # q = q.transpose(1, 2) 
+        attn = torch.matmul(q, k.transpose(-1, -2))
+        attn = attn / math.sqrt(self.head_dim)
+        
+        if mask is not None:
+            attn = attn.masked_fill(mask == 0, -1e32)
+        attn = self.dropout(torch.softmax(attn, dim = -1)) # [batch_size, head, len_q,  len_k]
+        
+        # v = self.rpe(v.transpose(1, 2), diff) # [batch_size, head, len_k,  head_dim]
+        output = torch.matmul(attn, v) # [batch_size, head, len_q,  head_dim]
+        output = output.permute(0, 2, 1, 3).contiguous() #x = [batch size, query len, n heads, head dim]
+        output = output.view(batch_size, -1, self.d_model) #x = [batch size, query len, hid dim]
+        output = self.out_proj(output)
+
+        return output, attn
 
 # device = "cpu" if not torch.cuda.is_available() else "cuda"
 
@@ -578,5 +665,3 @@ def get_clones(module, N):
     """ Cloning nn modules
     """
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
-
-
