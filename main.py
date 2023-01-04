@@ -384,6 +384,9 @@ if __name__ == "__main__":
     parser.add_argument("--l2", type=float, default=0.0, help="l2 regularization param")
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
     parser.add_argument("--optimizer", type=str, default="adam", help="optimizer")
+    
+    parser.add_argument("--de_type", type=str, default="", help="sde, rde")
+    
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
@@ -400,8 +403,8 @@ if __name__ == "__main__":
 
     if args.model_name == "cl4kt":
         cfg.cl4kt_config = cfg.cl4kt_config[cfg.data_name]
-        cfg.cl4kt_config["only_rp"] = args.only_rp
-        cfg.cl4kt_config["choose_cl"] = args.choose_cl
+        cfg.cl4kt_config.only_rp = args.only_rp
+        cfg.cl4kt_config.choose_cl = args.choose_cl
         # cfg.cl4kt_config.reg_cl = args.reg_cl
         # cfg.cl4kt_config.mask_prob = args.mask_prob
         # cfg.cl4kt_config.crop_prob = args.crop_prob
@@ -416,11 +419,14 @@ if __name__ == "__main__":
     #     cfg.akt_config.dropout = args.dropout
     elif args.model_name == "rdemkt":
         cfg.rdemkt_config = cfg.rdemkt_config[cfg.data_name]
-        cfg.rdemkt_config["only_rp"] = args.only_rp
-        # cfg.mkt_config["choose_cl"] = args.choose_cl
+        cfg.rdemkt_config.only_rp = args.only_rp
+        # cfg.mkt_config.choose_cl = args.choose_cl
         # cfg.mkt_config.inter_lambda = args.inter_lambda
         # cfg.mkt_config.ques_lambda = args.ques_lambda
         # cfg.mkt_config.mask_prob = args.mask_prob
+        
+    cfg[f"{args.model_name}_config"].de_type =  args.de_type
+    
 
     cfg.freeze()
 

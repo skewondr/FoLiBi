@@ -616,7 +616,6 @@ class MultiHeadAttention_Rotary(nn.Module):
         # q = q.transpose(1, 2) 
         attn = torch.matmul(q, k.transpose(-1, -2))
         attn = attn / math.sqrt(self.head_dim)
-        
         if mask is not None:
             attn = attn.masked_fill(mask == 0, -1e32)
         attn = self.dropout(torch.softmax(attn, dim = -1)) # [batch_size, head, len_q,  len_k]
