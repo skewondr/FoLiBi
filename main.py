@@ -95,6 +95,7 @@ def main(config):
     optimizer = train_config.optimizer
     seq_len = train_config.seq_len
     diff_order = train_config.diff_order
+    sparsity = train_config.sparsity
 
     if train_config.sequence_option == "recent":  # the most recent N interactions
         dataset = MostRecentQuestionSkillDataset
@@ -169,11 +170,24 @@ def main(config):
 
         train_dataset = dataset(train_df, seq_len, num_skills, num_questions)
         valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions)
-        valid_dataset.sdiff_array = train_dataset.sdiff_array
-        valid_dataset.qdiff_array = train_dataset.qdiff_array
+        valid_dataset.sdiff_array = train_dataset.sdiff_array.copy()
+        valid_dataset.qdiff_array = train_dataset.qdiff_array.copy()
         test_dataset = dataset(test_df, seq_len, num_skills, num_questions)
-        test_dataset.sdiff_array = train_dataset.sdiff_array
-        test_dataset.qdiff_array = train_dataset.qdiff_array
+        test_dataset.sdiff_array = train_dataset.sdiff_array.copy()
+        test_dataset.qdiff_array = train_dataset.qdiff_array.copy()
+        
+        if sparsity < 1 :
+            non0_s = (train_dataset.sdiff_array!=0).nonzero()[0]
+            non0_q = (train_dataset.qdiff_array!=0).nonzero()[0]
+            rm_sidx = np.random.choice(non0_s, int(len(non0_s)*sparsity), replace=False)
+            rm_qidx = np.random.choice(non0_q, int(len(non0_q)*sparsity), replace=False)
+            
+            valid_dataset.sdiff_array[rm_sidx] = 0 
+            valid_dataset.qdiff_array[rm_qidx] = 0 
+            test_dataset.sdiff_array[rm_sidx] = 0 
+            test_dataset.qdiff_array[rm_qidx] = 0 
+            print(f"s sparsity(test/valid):{len(non0_s)/len(test_dataset.sdiff_array):.2f}-->{len( (test_dataset.sdiff_array!=0).nonzero()[0])/len(test_dataset.sdiff_array):.2f}")
+            print(f"q sparsity(test/valid):{len(non0_q)/len(test_dataset.qdiff_array):.2f}-->{len( (test_dataset.qdiff_array!=0).nonzero()[0])/len(test_dataset.qdiff_array):.2f}")
 
 
         print("train_ids", len(train_users))
@@ -386,6 +400,7 @@ if __name__ == "__main__":
     parser.add_argument("--optimizer", type=str, default="adam", help="optimizer")
     
     parser.add_argument("--de_type", type=str, default="", help="sde, rde")
+    parser.add_argument("--sparsity", type=float, default=1.0, help="sparsity of difficulty in valid/test dataset")
     
     args = parser.parse_args()
 
@@ -400,6 +415,7 @@ if __name__ == "__main__":
     cfg.train_config.learning_rate = args.lr
     cfg.train_config.optimizer = args.optimizer
     cfg.train_config.describe = args.describe
+    cfg.train_config.sparsity = args.sparsity
 
     if args.model_name == "cl4kt":
         cfg.cl4kt_config = cfg.cl4kt_config[cfg.data_name]
