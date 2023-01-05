@@ -128,15 +128,32 @@ class CL4KT(Module):
                 "responses"
             ]  # augmented r_i, augmented r_j and original r
             attention_mask_i, attention_mask_j, attention_mask = batch["attention_mask"]
-
+            diff_i, diff_j, diff = batch["sdiff"]
             if not self.only_rp:
+                if self.token_num < 1000 :  
+                    diff = torch.ceil(diff * (self.token_num-1)).long()
+                    diff_xo = torch.where(neg_r == 1 , (diff - self.token_num) * (neg_r > -1).int(), diff * (neg_r > -1).int())
+                    diff_i = torch.ceil(diff_i * (self.token_num-1)).long()
+                    diff_i_ox = torch.where(r_i == 1 , (diff_i - self.token_num) * (r_i > -1).int(), diff_i * (r_i > -1).int())
+                    diff_j = torch.ceil(diff_j * (self.token_num-1)).long()
+                    diff_j_ox = torch.where(r_j == 1 , (diff_j - self.token_num) * (r_j > -1).int(), diff_j * (r_j > -1).int())
+                    diff_ox = torch.where(r == 1 , (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
+                else:
+                    diff = diff * 100
+                    diff_xo = torch.where(neg_r == 1 , (diff - 100) * (neg_r > -1).int(), diff * (neg_r > -1).int())
+                    diff_i = diff_i * 100
+                    diff_i_ox = torch.where(r_i == 1 , (diff_i - 100) * (r_i > -1).int(), diff_i * (r_i > -1).int())
+                    diff_j = diff_j * 100
+                    diff_j_ox = torch.where(r_j == 1 , (diff_j - 100) * (r_j > -1).int(), diff_j * (r_j > -1).int())
+                    diff_ox = torch.where(r == 1 , (diff - 100) * (r > -1).int(), diff * (r > -1).int())
+
                 ques_i_embed = self.question_embed(q_i)
                 ques_j_embed = self.question_embed(q_j)
-                inter_i_embed, _ = self.get_interaction_embed(q_i, r_i)
-                inter_j_embed, _ = self.get_interaction_embed(q_j, r_j)
+                inter_i_embed, _ = self.get_interaction_embed(q_i, r_i, diff_i)
+                inter_j_embed, _ = self.get_interaction_embed(q_j, r_j, diff_j)
                 if self.negative_prob > 0:
                     # inter_k_embed = self.get_negative_interaction_embed(q, r) # hard negative
-                    inter_k_embed, _ = self.get_interaction_embed(q, neg_r)
+                    inter_k_embed, _ = self.get_interaction_embed(q, neg_r, diff)
 
                 # mask=2 means bidirectional attention of BERT
                 ques_i_score, ques_j_score = ques_i_embed, ques_j_embed
@@ -166,6 +183,7 @@ class CL4KT(Module):
                             query=inter_i_score,
                             key=inter_i_score,
                             values=inter_i_score,
+                            diff = diff_i_ox,
                             apply_pos=False,
                         )
                         inter_j_score, _ = block(
@@ -173,6 +191,7 @@ class CL4KT(Module):
                             query=inter_j_score,
                             key=inter_j_score,
                             values=inter_j_score,
+                            diff = diff_j_ox,
                             apply_pos=False,
                         )
                         if self.negative_prob > 0:
@@ -181,6 +200,7 @@ class CL4KT(Module):
                                 query=inter_k_embed,
                                 key=inter_k_embed,
                                 values=inter_k_embed,
+                                diff = diff_xo,
                                 apply_pos=False,
                             )
                 if self.choose_cl in ["q_cl", "both"]:
@@ -247,13 +267,14 @@ class CL4KT(Module):
             attention_mask = batch["attention_mask"]
             question_cl_loss, interaction_cl_loss = 0, 0
             
-        diff = batch["sdiff"]
-        if self.token_num < 1000 :  
-            diff = torch.ceil(diff * (self.token_num-1)).long()
-            diff_ox = torch.where(r == 1 , (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
-        else:
-            diff = diff * 100
-            diff_ox = torch.where(r == 1 , (diff - 100) * (r > -1).int(), diff * (r > -1).int())
+            diff = batch["sdiff"]
+            
+            if self.token_num < 1000 :  
+                diff = torch.ceil(diff * (self.token_num-1)).long()
+                diff_ox = torch.where(r == 1 , (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
+            else:
+                diff = diff * 100
+                diff_ox = torch.where(r == 1 , (diff - 100) * (r > -1).int(), diff * (r > -1).int())
 
         q_embed = self.question_embed(q)
         i_embed, demb = self.get_interaction_embed(q, r, diff)

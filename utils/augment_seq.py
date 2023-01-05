@@ -54,6 +54,10 @@ def augment_kt_seqs(
     q_seq,
     s_seq,
     r_seq,
+    qdiff,
+    sdiff,
+    qdiff_array,
+    sdiff_array,
     mask_prob,
     crop_prob,
     permute_prob,
@@ -76,15 +80,20 @@ def augment_kt_seqs(
     masked_s_seq = []
     masked_r_seq = []
     negative_r_seq = []
+    mqdiff_seq = []
+    msdiff_seq = []
+
 
     if mask_prob > 0:
-        for q, s, r in zip(q_seq, s_seq, r_seq):
+        for _, (q, s, r) in enumerate(zip(q_seq, s_seq, r_seq)):
             prob = rng.random()
             if prob < mask_prob and s != 0:
                 prob /= mask_prob
                 if prob < 0.8:
                     masked_q_seq.append(q_mask_id)
                     masked_s_seq.append(s_mask_id)
+                    mqdiff_seq.append(0)
+                    msdiff_seq.append(0)
                 elif prob < 0.9:
                     masked_q_seq.append(
                         rng.randint(1, q_mask_id - 1)
@@ -92,12 +101,18 @@ def augment_kt_seqs(
                     masked_s_seq.append(
                         rng.randint(1, s_mask_id - 1)
                     )  # randint(start, end) [start, end] 둘다 포함
+                    mqdiff_seq.append(0)
+                    msdiff_seq.append(0)
                 else:
                     masked_q_seq.append(q)
                     masked_s_seq.append(s)
+                    mqdiff_seq.append(qdiff[_])
+                    msdiff_seq.append(sdiff[_])
             else:
                 masked_q_seq.append(q)
                 masked_s_seq.append(s)
+                mqdiff_seq.append(qdiff[_])
+                msdiff_seq.append(sdiff[_])
             masked_r_seq.append(r)  # response는 나중에 hard negatives로 활용 (0->1, 1->0)
 
             # reverse responses
@@ -110,6 +125,8 @@ def augment_kt_seqs(
         masked_q_seq = q_seq[:]
         masked_s_seq = s_seq[:]
         masked_r_seq = r_seq[:]
+        mqdiff_seq = qdiff[:]
+        msdiff_seq = sdiff[:]
 
         for r in r_seq:
             # reverse responses
@@ -132,10 +149,14 @@ def augment_kt_seqs(
                     r == 0 and s in harder_skills
                 ):  # if the response is wrong, then replace a skill with the harder one
                     masked_s_seq[i] = harder_skills[s]
+                    msdiff_seq[i] = sdiff_array[harder_skills[s]]
+                    mqdiff_seq[i] = qdiff[i] - (sdiff[i] - sdiff_array[harder_skills[s]])
                 elif (
                     r == 1 and s in easier_skills
                 ):  # if the response is correct, then replace a skill with the easier one
                     masked_s_seq[i] = easier_skills[s]
+                    msdiff_seq[i] = sdiff_array[easier_skills[s]]
+                    mqdiff_seq[i] = qdiff[i] - (sdiff[i] - sdiff_array[easier_skills[s]])
 
     true_seq_len = np.sum(np.asarray(q_seq) != 0)
     if permute_prob > 0:
@@ -169,8 +190,23 @@ def augment_kt_seqs(
             ].tolist()
             + masked_r_seq[start_pos + reorder_seq_len :]
         )
+        mqdiff_seq = (
+            mqdiff_seq[:start_pos]
+            + np.asarray(mqdiff_seq[start_pos : start_pos + reorder_seq_len])[
+                perm
+            ].tolist()
+            + mqdiff_seq[start_pos + reorder_seq_len :]
+        )
+        msdiff_seq = (
+            msdiff_seq[:start_pos]
+            + np.asarray(msdiff_seq[start_pos : start_pos + reorder_seq_len])[
+                perm
+            ].tolist()
+            + msdiff_seq[start_pos + reorder_seq_len :]
+        )
 
     # To-Do: check this crop logic!
+    true_seq_len = np.sum(np.asarray(q_seq) != 0)
     if 0 < crop_prob < 1:
         crop_seq_len = math.floor(crop_prob * true_seq_len)
         if crop_seq_len == 0:
@@ -184,17 +220,21 @@ def augment_kt_seqs(
         masked_q_seq = masked_q_seq[start_pos : start_pos + crop_seq_len]
         masked_s_seq = masked_s_seq[start_pos : start_pos + crop_seq_len]
         masked_r_seq = masked_r_seq[start_pos : start_pos + crop_seq_len]
+        mqdiff_seq = mqdiff_seq[start_pos : start_pos + crop_seq_len]
+        msdiff_seq = msdiff_seq[start_pos : start_pos + crop_seq_len]
 
         pad_len = seq_len - len(masked_q_seq)
         attention_mask = [0] * pad_len + [1] * len(masked_s_seq)
         masked_q_seq = [0] * pad_len + masked_q_seq
         masked_s_seq = [0] * pad_len + masked_s_seq
         masked_r_seq = [-1] * pad_len + masked_r_seq
+        mqdiff_seq = [-1] * pad_len + mqdiff_seq
+        msdiff_seq = [-1] * pad_len + msdiff_seq
     else: 
         pad_len = seq_len - true_seq_len
         attention_mask = [0] * pad_len + [1] * true_seq_len
 
-    return masked_q_seq, masked_s_seq, masked_r_seq, negative_r_seq, attention_mask
+    return masked_q_seq, masked_s_seq, masked_r_seq, negative_r_seq, attention_mask, mqdiff_seq, msdiff_seq
 
 def mask_kt_seqs(
     aug_flag,

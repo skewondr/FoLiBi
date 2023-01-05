@@ -66,11 +66,19 @@ class SimCLRDatasetWrapper(Dataset):
             q_seq_list = original_data["questions"].tolist()
             s_seq_list = original_data["skills"].tolist()
             r_seq_list = original_data["responses"].tolist()
+            qdiff_list = original_data["qdiff"].tolist()
+            sdiff_list = original_data["sdiff"].tolist()
+            qdiff_array = self.ds.qdiff_array
+            sdiff_array = self.ds.sdiff_array
 
             t1 = augment_kt_seqs(
                 q_seq_list,
                 s_seq_list,
                 r_seq_list,
+                qdiff_list,
+                sdiff_list,
+                qdiff_array,
+                sdiff_array,
                 self.mask_prob,
                 self.crop_prob,
                 self.permute_prob,
@@ -88,6 +96,10 @@ class SimCLRDatasetWrapper(Dataset):
                 q_seq_list,
                 s_seq_list,
                 r_seq_list,
+                qdiff_list,
+                sdiff_list,
+                qdiff_array,
+                sdiff_array,
                 self.mask_prob,
                 self.crop_prob,
                 self.permute_prob,
@@ -101,8 +113,8 @@ class SimCLRDatasetWrapper(Dataset):
                 seed=index + 1,
             )
 
-            aug_q_seq_1, aug_s_seq_1, aug_r_seq_1, negative_r_seq, attention_mask_1 = t1
-            aug_q_seq_2, aug_s_seq_2, aug_r_seq_2, _, attention_mask_2 = t2
+            aug_q_seq_1, aug_s_seq_1, aug_r_seq_1, negative_r_seq, attention_mask_1, qdiff_1, sdiff_1 = t1
+            aug_q_seq_2, aug_s_seq_2, aug_r_seq_2, _, attention_mask_2, qdiff_2, sdiff_2 = t2
 
             aug_q_seq_1 = torch.tensor(aug_q_seq_1, dtype=torch.long)
             aug_q_seq_2 = torch.tensor(aug_q_seq_2, dtype=torch.long)
@@ -110,6 +122,10 @@ class SimCLRDatasetWrapper(Dataset):
             aug_s_seq_2 = torch.tensor(aug_s_seq_2, dtype=torch.long)
             aug_r_seq_1 = torch.tensor(aug_r_seq_1, dtype=torch.long)
             aug_r_seq_2 = torch.tensor(aug_r_seq_2, dtype=torch.long)
+            aug_qd_seq_1 = torch.tensor(qdiff_1, dtype=torch.float)
+            aug_qd_seq_2 = torch.tensor(qdiff_2, dtype=torch.float)
+            aug_sd_seq_1 = torch.tensor(sdiff_1, dtype=torch.float)
+            aug_sd_seq_2 = torch.tensor(sdiff_2, dtype=torch.float)
             negative_r_seq = torch.tensor(negative_r_seq, dtype=torch.long)
             attention_mask_1 = torch.tensor(attention_mask_1, dtype=torch.long)
             attention_mask_2 = torch.tensor(attention_mask_2, dtype=torch.long)
@@ -119,7 +135,8 @@ class SimCLRDatasetWrapper(Dataset):
                 "skills": (aug_s_seq_1, aug_s_seq_2, s_seq),
                 "responses": (aug_r_seq_1, aug_r_seq_2, r_seq, negative_r_seq),
                 "attention_mask": (attention_mask_1, attention_mask_2, attention_mask),
-                "sdiff": original_data["sdiff"],
+                "qdiff": (aug_qd_seq_1, aug_qd_seq_2, original_data["qdiff"]),
+                "sdiff": (aug_sd_seq_1, aug_sd_seq_2, original_data["sdiff"]),
             }
             return ret
 
