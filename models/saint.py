@@ -2,14 +2,15 @@ import torch
 import torch.nn as nn
 from torch.nn import Dropout, BCELoss
 import pandas as pd
-from .modules import transformer_FFN, get_clones, ut_mask, pos_encode
+from .modules import transformer_FFN, get_clones, ut_mask, pos_encode, MultiHeadAttention_Rotary
 from torch.nn import Embedding, Linear
 from IPython import embed 
+from .rpe import SinusoidalPositionalEmbeddings 
 
 # device = "cpu" if not torch.cuda.is_available() else "cuda"
 
 class SAINT(nn.Module):
-    def __init__(self, device, num_skills, num_questions, seq_len, embedding_size, num_attn_heads, num_blocks, dropout):
+    def __init__(self, device, num_skills, num_questions, seq_len, embedding_size, num_attn_heads, num_blocks, dropout, de_type="none"):
         super().__init__()
         # print(f"num_questions: {num_questions}, num_skills: {num_skills}")
         if num_questions == num_skills and num_questions == 0:
@@ -26,7 +27,19 @@ class SAINT(nn.Module):
         self.device = device
         self.encoder = get_clones(Encoder_block(device, embedding_size, num_attn_heads, num_questions, num_skills, seq_len, dropout), self.num_en)
         
-        self.decoder = get_clones(Decoder_block(device, embedding_size, 2, num_attn_heads, seq_len, dropout), self.num_de)
+        self.de = de_type.split('_')[0]
+        self.token_num = int(de_type.split('_')[1])
+        if self.de in ["sde", "lsde"]:
+            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*self.token_num, embedding_size)).to(device)
+            self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
+            rotary = "none"
+        elif self.de == "rde":
+            rotary = "qkv"
+        else: 
+            rotary = "none"
+            
+        self.decoder = get_clones(Decoder_block(device, embedding_size, num_attn_heads, seq_len, dropout, rotary), self.num_de)
+        self.embd_res    = nn.Embedding(2+1, embedding_dim = embedding_size)                  #response embedding, include a start token
 
         self.dropout = Dropout(dropout)
         self.out = nn.Linear(in_features=embedding_size, out_features=1)
@@ -36,6 +49,7 @@ class SAINT(nn.Module):
         in_ex = feed_dict["questions"]
         in_cat = feed_dict["skills"]
         in_res = feed_dict["responses"][:, :-1]
+        diff = feed_dict["sdiff"][:, :-1]
 
         if self.num_questions > 0:
             in_pos = pos_encode(self.device, in_ex.shape[1])
@@ -50,20 +64,40 @@ class SAINT(nn.Module):
                 first_block = False
             in_ex = self.encoder[i](in_ex, in_cat, in_pos, first_block=first_block)
             in_cat = in_ex
+            
         ## pass through each decoder blocks in sequence
         start_token = torch.tensor([[2]]).repeat(in_res.shape[0], 1).to(self.device)
         in_res = in_res * (in_res > -1).long()
         in_res = torch.cat((start_token, in_res), dim=-1)
         r = in_res
+        diff_token = torch.tensor([[0]]).repeat(in_res.shape[0], 1).to(self.device)
+        diff = torch.cat((diff_token, diff), dim=-1)
         first_block = True
+        
+        if self.token_num < 1000 :  
+            diff = torch.ceil(diff * (self.token_num-1)).long()
+            diff_ox = torch.where(r == 1 , (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
+        else:
+            diff = diff * 100
+            diff_ox = torch.where(r == 1 , (diff - 100) * (r > -1).int(), diff * (r > -1).int())
+            
+         ## todo create a positional encoding (two options numeric, sine)
+        #combining the embedings
+        out = self.embd_res(in_res) + in_pos                         # (b,n,d)
+        if self.de in ["sde", "lsde"]:
+            diffx = self.token_num + diff * (r > -1).long()
+            diffo = diff * (r > -1).int()
+            diffox = torch.where(r == 1 ,diffo, diffx)
+            demb = self.diff_emb(diffox).float()
+            out += demb
+        
         for i in range(self.num_de):
-            if i >= 1:
-                first_block = False
-            in_res = self.decoder[i](in_res, in_pos, en_out=in_ex, first_block=first_block)
+            if i>0 and self.de == "lsde": out += demb 
+            out = self.decoder[i](out, en_out=in_ex, diff=diff_ox)
         
         ## Output layer
 
-        res = self.out(self.dropout(in_res))
+        res = self.out(self.dropout(out))
         res = torch.sigmoid(res).squeeze(-1)
         out_dict = {
             "pred": res[:, 1:],
@@ -165,12 +199,15 @@ class Decoder_block(nn.Module):
     L = SkipConct(FFN(LayerNorm(M2)))
     """
 
-    def __init__(self, device, dim_model, total_res, heads_de, seq_len, dropout):
+    def __init__(self, device, dim_model, heads_de, seq_len, dropout, rotary="none"):
         super().__init__()
         self.seq_len    = seq_len
-        self.embd_res    = nn.Embedding(total_res+1, embedding_dim = dim_model)                  #response embedding, include a start token
         # self.embd_pos   = nn.Embedding(seq_len, embedding_dim = dim_model)                  #positional embedding
-        self.multi_de1  = nn.MultiheadAttention(embed_dim= dim_model, num_heads= heads_de, dropout=dropout)  # M1 multihead for interaction embedding as q k v
+        self.rotary = rotary
+        if self.rotary in ["qkv", "none"]:
+            self.multi_de1 = MultiHeadAttention_Rotary(dim_model, heads_de, dropout=dropout, rotary=self.rotary)
+        else:
+            self.multi_de1  = nn.MultiheadAttention(embed_dim= dim_model, num_heads= heads_de, dropout=dropout)  # M1 multihead for interaction embedding as q k v
         self.multi_de2  = nn.MultiheadAttention(embed_dim= dim_model, num_heads= heads_de, dropout=dropout)  # M2 multihead for M1 out, encoder out, encoder out as q k v
         self.ffn_en     = transformer_FFN(dim_model, dropout)                                         # feed forward layer
 
@@ -185,30 +222,29 @@ class Decoder_block(nn.Module):
         self.device = device 
 
 
-    def forward(self, in_res, in_pos, en_out,first_block=True):
-
-         ## todo create a positional encoding (two options numeric, sine)
-        if first_block:
-            in_in = self.embd_res(in_res)
-
-            #combining the embedings
-            out = in_in + in_pos                         # (b,n,d)
+    def forward(self, out, en_out, diff=None):
+        
+        if self.rotary in ["qkv", "none"]:
+            _,n,_ = out.shape
+            out = self.layer_norm1(out)
+            skip_out = out
+            causal_mask = ut_mask(self.device, seq_len = out.shape[1])
+            causal_mask = ~causal_mask  
+            out, attn_wt = self.multi_de1(out, out, out, diff=diff, mask=causal_mask)
+            out = self.dropout1(out)
+            out = skip_out + out                                        # skip connection
+            out = out.permute(1,0,2)                                    # (n,b,d)# print('pre multi', out.shape)
         else:
-            out = in_res
+            out = out.permute(1,0,2)                                    # (n,b,d)# print('pre multi', out.shape)
+            n,_,_ = out.shape
 
-        # in_pos = get_pos(self.seq_len)
-        # in_pos = self.embd_pos(in_pos)
-
-        out = out.permute(1,0,2)                                    # (n,b,d)# print('pre multi', out.shape)
-        n,_,_ = out.shape
-
-        #Multihead attention M1                                     ## todo verify if E to passed as q,k,v
-        out = self.layer_norm1(out)
-        skip_out = out
-        out, attn_wt = self.multi_de1(out, out, out, 
-                                     attn_mask=ut_mask(self.device, seq_len=n)) # attention mask upper triangular
-        out = self.dropout1(out)
-        out = skip_out + out                                        # skip connection
+            #Multihead attention M1                                     ## todo verify if E to passed as q,k,v
+            out = self.layer_norm1(out)
+            skip_out = out
+            out, attn_wt = self.multi_de1(out, out, out, 
+                                        attn_mask=ut_mask(self.device, seq_len=n)) # attention mask upper triangular
+            out = self.dropout1(out)
+            out = skip_out + out                                        # skip connection
 
         #Multihead attention M2                                     ## todo verify if E to passed as q,k,v
         en_out = en_out.permute(1,0,2)                              # (b,n,d)-->(n,b,d)
