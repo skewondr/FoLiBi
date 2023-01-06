@@ -28,15 +28,17 @@ import wandb
 import time 
 from time import localtime 
 
-def get_diff_df(df, num_skills, num_questions):
+def get_diff_df(df, num_skills, num_questions, total_cnt_init=1, diff_unk=0.0):
     q_total_cnt = np.ones((num_questions+1))
     q_crt_cnt = np.zeros((num_questions+1))
-    q_diff = np.zeros((num_questions+1))
 
     c_total_cnt = np.ones((num_skills+1))
     c_crt_cnt = np.zeros((num_skills+1))
-    c_diff = np.zeros((num_skills+1))
     
+    if total_cnt_init == 0:
+        q_total_cnt = np.zeros((num_questions+1))
+        c_total_cnt = np.zeros((num_skills+1))
+
     for q, c, r in zip(df["item_id"], df["skill_id"], df["correct"]):
         c_total_cnt[c] += 1
         if r:
@@ -44,6 +46,14 @@ def get_diff_df(df, num_skills, num_questions):
         q_total_cnt[q] += 1
         if r:
             q_crt_cnt[q] += 1
+
+    if diff_unk != 0.0: ## else unk is zero
+        q_crt_cnt[np.where(q_total_cnt == total_cnt_init)] = diff_unk
+        c_crt_cnt[np.where(c_total_cnt == total_cnt_init)] = diff_unk
+
+    if total_cnt_init == 0:
+        q_total_cnt = np.where(q_total_cnt == 0, 1, q_total_cnt)
+        c_total_cnt = np.where(c_total_cnt == 0, 1, c_total_cnt)
 
     q_diff = q_crt_cnt/q_total_cnt
     c_diff = c_crt_cnt/c_total_cnt
@@ -386,7 +396,11 @@ if __name__ == "__main__":
     parser.add_argument("--optimizer", type=str, default="adam", help="optimizer")
     
     parser.add_argument("--de_type", type=str, default="", help="sde, rde")
+
+    parser.add_argument("--total_cnt_init", type=int, default=1, help="total_cnt_init")
+    parser.add_argument("--diff_unk", type=float, default=0.0, help="diff_unk")
     
+
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
@@ -400,6 +414,9 @@ if __name__ == "__main__":
     cfg.train_config.learning_rate = args.lr
     cfg.train_config.optimizer = args.optimizer
     cfg.train_config.describe = args.describe
+
+    cfg.total_cnt_init = args.total_cnt_init
+    cfg.diff_unk = args.diff_unk
 
     if args.model_name == "cl4kt":
         cfg.cl4kt_config = cfg.cl4kt_config[cfg.data_name]

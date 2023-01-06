@@ -190,8 +190,6 @@ class MKMDatasetWrapper(Dataset):
             r_seq_list = original_data["responses"].tolist()
             qdiff_list = original_data["qdiff"].tolist()
             sdiff_list = original_data["sdiff"].tolist()
-            qdiff_array = self.ds.qdiff_array
-            sdiff_array = self.ds.sdiff_array
             
             rng = random.Random(index)
             
