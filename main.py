@@ -27,6 +27,7 @@ from stat_data import get_stat
 import wandb 
 import time 
 from time import localtime 
+import statistics 
 
 def get_diff_df(df, num_skills, num_questions, total_cnt_init=1, diff_unk=0.0):
     q_total_cnt = np.ones((num_questions+1))
@@ -135,7 +136,7 @@ def main(config):
     print(dataset)
     now = (datetime.now() + timedelta(hours=9)).strftime("%Y%m%d-%H%M%S") 
     for fold, (train_ids, test_ids) in enumerate(kfold.split(users)):
-        # if fold > 0 : break
+        # if fold > 2 : break
         if model_name == "akt":
             model_config = config.akt_config
             if data_name in ["statics", "assistments15"]:
@@ -322,13 +323,19 @@ def main(config):
     test_rmse_std = np.std(test_rmses)
 
     print_args = model_config.copy()
+    print_args["sparsity"] = sparsity
     print_args["diff_order"] = diff_order
     print_args["Model"] = model_name
     print_args["Dataset"] = data_name
     print_args["auc"] = round(test_auc, 4)
+    print_args["auc_std"] = round(test_auc_std, 4)
     print_args["acc"] = round(test_acc, 4)
+    print_args["acc_std"] = round(test_acc_std, 4)
     print_args["rmse"] = round(test_rmse, 4)
+    print_args["rmse_std"] = round(test_rmse_std, 4)
     print_args["describe"] = train_config.describe
+    print_args["gpu_num"] = train_config.gpu_num
+    print_args["server_num"] = train_config.server_num
     if config.use_wandb:
         wandb.log(print_args)
 
@@ -415,6 +422,9 @@ if __name__ == "__main__":
     
     parser.add_argument("--total_cnt_init", type=int, default=1, help="total_cnt_init")
     parser.add_argument("--diff_unk", type=float, default=0.0, help="diff_unk")
+    
+    parser.add_argument("--gpu_num", type=int, required=True, help="gpu number")
+    parser.add_argument("--server_num", type=int, required=True, help="server number")
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
@@ -429,7 +439,9 @@ if __name__ == "__main__":
     cfg.train_config.optimizer = args.optimizer
     cfg.train_config.describe = args.describe
     cfg.train_config.sparsity = args.sparsity
-
+    cfg.train_config.gpu_num = args.gpu_num
+    cfg.train_config.server_num = args.server_num
+    
     cfg.total_cnt_init = args.total_cnt_init
     cfg.diff_unk = args.diff_unk
 
