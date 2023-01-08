@@ -639,8 +639,10 @@ class MultiheadAttention(nn.Module):
              for l, x in zip(self.linears, (query, key, value))]
             
         if self.rotary in "qkv" and diff is not None:
-            key = self.rpe(key, diff) # [batch_size, head, len_k,  head_dim]
-            query = self.rpe(query, diff) # [batch_size, head, len_q,  head_dim]
+            if "q" in self.rotary :
+                query = self.rpe(query, diff) # [batch_size, head, len_q,  head_dim]
+            if "k" in self.rotary :
+                key = self.rpe(key, diff) # [batch_size, head, len_k,  head_dim]
             if "v" in self.rotary :
                 value = self.rpe(value, diff) # [batch_size, head, len_q,  head_dim]
 

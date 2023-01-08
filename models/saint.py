@@ -33,7 +33,7 @@ class SAINT(nn.Module):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
             rotary = "none"
-        elif self.de == "rde":
+        elif self.de in ["rde", "lrde"]:
             rotary = "qkv"
         else: 
             rotary = "none"

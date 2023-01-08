@@ -184,6 +184,9 @@ class CL4KT(Module):
                         if i>0 and self.de == "lsde": 
                             inter_i_score += i_demb
                             inter_j_score += j_demb
+                        if i>0 and self.de == "rde": 
+                            si_diff_ox = None
+                            sj_diff_ox = None 
                         inter_i_score, _ = block(
                             mask=2,
                             query=inter_i_score,
@@ -203,6 +206,8 @@ class CL4KT(Module):
                         if self.negative_prob > 0:
                             if i>0 and self.de == "lsde": 
                                 inter_k_score += neg_demb
+                            if i>0 and self.de == "rde": 
+                                neg_diff = None 
                             inter_k_score, _ = block(
                                 mask=2,
                                 query=inter_k_embed,
