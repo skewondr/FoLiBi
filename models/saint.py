@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn import Dropout, BCELoss
 import pandas as pd
-from .modules import transformer_FFN, get_clones, ut_mask, pos_encode
+from .modules import transformer_FFN, get_clones, ut_mask, pos_encode, MultiheadAttention
 from torch.nn import Embedding, Linear
 from IPython import embed 
 
@@ -102,7 +102,7 @@ class Encoder_block(nn.Module):
             self.emb_cat = nn.Embedding(total_cat, embedding_dim = dim_model)
         # self.embd_pos   = nn.Embedding(seq_len, embedding_dim = dim_model)                  #positional embedding
 
-        self.multi_en = nn.MultiheadAttention(embed_dim = dim_model, num_heads = heads_en, dropout = dropout)
+        self.multi_en = MultiheadAttention(d_model = dim_model, h = heads_en, dropout = dropout)
         self.layer_norm1 = nn.LayerNorm(dim_model)
         self.dropout1 = Dropout(dropout)
 
@@ -135,20 +135,20 @@ class Encoder_block(nn.Module):
         # in_pos = get_pos(self.seq_len)
         # in_pos = self.embd_pos(in_pos)
 
-        out = out.permute(1,0,2)                                # (n,b,d)  # print('pre multi', out.shape)
+        # out = out.permute(1,0,2)                                # (n,b,d)  # print('pre multi', out.shape)
         
         # norm -> attn -> drop -> skip corresponging to transformers' norm_first
         #Multihead attention                            
-        n,_,_ = out.shape
+        _,n,_ = out.shape
         out = self.layer_norm1(out)                           # Layer norm
         skip_out = out 
         out, attn_wt = self.multi_en(out, out, out,
-                                attn_mask=ut_mask(self.device, seq_len=n))  # attention mask upper triangular
+                                mask=~ut_mask(self.device, seq_len=n))  # attention mask upper triangular
         out = self.dropout1(out)
         out = out + skip_out                                    # skip connection
 
         #feed forward
-        out = out.permute(1,0,2)                                # (b,n,d)
+        # out = out.permute(1,0,2)                                # (b,n,d)
         out = self.layer_norm2(out)                           # Layer norm 
         skip_out = out
         out = self.ffn_en(out)
@@ -170,8 +170,8 @@ class Decoder_block(nn.Module):
         self.seq_len    = seq_len
         self.embd_res    = nn.Embedding(total_res+1, embedding_dim = dim_model)                  #response embedding, include a start token
         # self.embd_pos   = nn.Embedding(seq_len, embedding_dim = dim_model)                  #positional embedding
-        self.multi_de1  = nn.MultiheadAttention(embed_dim= dim_model, num_heads= heads_de, dropout=dropout)  # M1 multihead for interaction embedding as q k v
-        self.multi_de2  = nn.MultiheadAttention(embed_dim= dim_model, num_heads= heads_de, dropout=dropout)  # M2 multihead for M1 out, encoder out, encoder out as q k v
+        self.multi_de1  = MultiheadAttention(d_model = dim_model, h = heads_de, dropout = dropout)  # M1 multihead for interaction embedding as q k v
+        self.multi_de2  = MultiheadAttention(d_model = dim_model, h = heads_de, dropout = dropout)  # M2 multihead for M1 out, encoder out, encoder out as q k v
         self.ffn_en     = transformer_FFN(dim_model, dropout)                                         # feed forward layer
 
         self.layer_norm1 = nn.LayerNorm(dim_model)
@@ -199,28 +199,28 @@ class Decoder_block(nn.Module):
         # in_pos = get_pos(self.seq_len)
         # in_pos = self.embd_pos(in_pos)
 
-        out = out.permute(1,0,2)                                    # (n,b,d)# print('pre multi', out.shape)
-        n,_,_ = out.shape
+        # out = out.permute(1,0,2)                                    # (n,b,d)# print('pre multi', out.shape)
+        _,n,_ = out.shape
 
         #Multihead attention M1                                     ## todo verify if E to passed as q,k,v
         out = self.layer_norm1(out)
         skip_out = out
         out, attn_wt = self.multi_de1(out, out, out, 
-                                     attn_mask=ut_mask(self.device, seq_len=n)) # attention mask upper triangular
+                                     mask=~ut_mask(self.device, seq_len=n)) # attention mask upper triangular
         out = self.dropout1(out)
         out = skip_out + out                                        # skip connection
 
         #Multihead attention M2                                     ## todo verify if E to passed as q,k,v
-        en_out = en_out.permute(1,0,2)                              # (b,n,d)-->(n,b,d)
+        # en_out = en_out.permute(1,0,2)                              # (b,n,d)-->(n,b,d)
         en_out = self.layer_norm2(en_out)
         skip_out = out
         out, attn_wt = self.multi_de2(out, en_out, en_out,
-                                    attn_mask=ut_mask(self.device, seq_len=n))  # attention mask upper triangular
+                                    mask=~ut_mask(self.device, seq_len=n))  # attention mask upper triangular
         out = self.dropout2(out)
         out = out + skip_out
 
         #feed forward
-        out = out.permute(1,0,2)                                    # (b,n,d)
+        # out = out.permute(1,0,2)                                    # (b,n,d)
         out = self.layer_norm3(out)                               # Layer norm 
         skip_out = out
         out = self.ffn_en(out)                                    

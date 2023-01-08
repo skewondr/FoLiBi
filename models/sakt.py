@@ -1,7 +1,7 @@
 import torch
 
-from torch.nn import Module, Embedding, Linear, MultiheadAttention, LayerNorm, Dropout, BCELoss
-from .modules import transformer_FFN, pos_encode, ut_mask, get_clones
+from torch.nn import Module, Embedding, Linear, LayerNorm, Dropout, BCELoss
+from .modules import transformer_FFN, pos_encode, ut_mask, get_clones, MultiheadAttention
 
 if torch.cuda.is_available():
     torch.set_default_tensor_type(torch.cuda.FloatTensor)
@@ -89,15 +89,9 @@ class Blocks(Module):
         self.FFN_layer_norm = LayerNorm(embedding_size)
 
     def forward(self, q=None, k=None, v=None):
-        q, k, v = q.permute(1, 0, 2), k.permute(1, 0, 2), v.permute(1, 0, 2)
-        # attn -> drop -> skip -> norm 
-        # transformer: attn -> drop -> skip -> norm transformer default
-        causal_mask = ut_mask(self.device, seq_len = k.shape[0])
-        attn_emb, _ = self.attn(q, k, v, attn_mask=causal_mask)
-
+        causal_mask = ut_mask(self.device, seq_len = k.shape[1])
+        attn_emb, _ = self.attn(q, k, v, mask=~causal_mask)
         attn_emb = self.attn_dropout(attn_emb)
-        attn_emb, q = attn_emb.permute(1, 0, 2), q.permute(1, 0, 2)
-
         attn_emb = self.attn_layer_norm(q + attn_emb)
 
         emb = self.FFN(attn_emb)
