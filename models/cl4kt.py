@@ -294,7 +294,7 @@ class CL4KT(Module):
             x, _ = block(mask=1, query=x, key=x, values=x, apply_pos=True)
 
         for i, block in enumerate(self.interaction_encoder):
-            if i>0 and self.de == "lsde": y += demb
+            if i>0 and self.de == "lsde": y += demb 
             y, _ = block(mask=1, query=y, key=y, values=y, diff=s_diff_ox, apply_pos=True)
 
         for block in self.knoweldge_retriever:

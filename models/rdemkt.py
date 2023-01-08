@@ -27,7 +27,7 @@ from .rpe import SinusoidalPositionalEmbeddings
 
 
 class RDEMKT(Module):
-    def __init__(self, num_skills, num_questions, seq_len, **kwargs):
+    def __init__(self, device, num_skills, num_questions, seq_len, **kwargs):
         super(RDEMKT, self).__init__()
         self.num_skills = num_skills
         self.num_questions = num_questions
@@ -132,14 +132,16 @@ class RDEMKT(Module):
                 boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
                 diff = torch.bucketize(diff, boundaries)
                 diff_i = torch.bucketize(diff_i, boundaries)
+                s_diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
                 si_diff_ox = torch.where(r_i == 0 , (diff_i -(self.token_num+1)) * (r_i > -1).int(), diff_i * (r_i > -1).int())
             else:
                 diff = diff * 100
                 diff_i = diff_i * 100
+                s_diff_ox = torch.where(r==0 , (diff-(100+1)) * (r > -1).int(), diff * (r > -1).int())
                 si_diff_ox = torch.where(r_i == 0 , (diff_i -(100+1)) * (r_i > -1).int(), diff_i * (r_i > -1).int())
                 
             if not self.only_rp:
-                ques_i_embed, _ = self.question_embed(q_i) #original
+                ques_i_embed = self.question_embed(q_i) #original
                 inter_i_embed, i_demb = self.get_interaction_embed(q, r_i, diff_i) #masked
 
                 # BERT
@@ -154,7 +156,7 @@ class RDEMKT(Module):
                         )
                 if self.choose_cl in ["s_cl", "both"]:
                     for i, block in enumerate(self.interaction_encoder):
-                        if i>0 and self.de == "lsde": inter_i_score += i_demb
+                        if i>0 and self.de == "lsde": inter_i_score += i_demb 
                         inter_i_score, _ = block(
                             mask=2,
                             query=inter_i_embed,
@@ -207,7 +209,7 @@ class RDEMKT(Module):
             x, _ = block(mask=1, query=x, key=x, values=x, apply_pos=True)
 
         for i, block in enumerate(self.interaction_encoder):
-            if i>0 and self.de == "lsde": y += demb
+            if i>0 and self.de == "lsde": y += demb 
             y, _ = block(mask=1, query=y, key=y, values=y, diff=s_diff_ox, apply_pos=True)
 
         for block in self.knoweldge_retriever:

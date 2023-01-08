@@ -136,7 +136,7 @@ def main(config):
     print(dataset)
     now = (datetime.now() + timedelta(hours=9)).strftime("%Y%m%d-%H%M%S") 
     for fold, (train_ids, test_ids) in enumerate(kfold.split(users)):
-        # if fold > 2 : break
+        # if fold > 1 : break
         if model_name == "akt":
             model_config = config.akt_config
             if data_name in ["statics", "assistments15"]:
@@ -158,7 +158,7 @@ def main(config):
             model = SAINT(device, num_skills, num_questions, seq_len, **model_config)
         elif model_name == "rdemkt":
             model_config = config.rdemkt_config
-            model = RDEMKT(num_skills, num_questions, seq_len, **model_config)
+            model = RDEMKT(device, num_skills, num_questions, seq_len, **model_config)
             mask_prob = model_config.mask_prob
 
         print(train_config)
