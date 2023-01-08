@@ -88,7 +88,7 @@ class AKT(Module):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
             rotary = "none"
-        elif self.de == "rde":
+        elif self.de in ["rde", "lrde"]:
             rotary = "qkv"
         else: 
             rotary = "none"
@@ -310,6 +310,7 @@ class Architecture(Module):
             1 means that block can peek only current and past values
             """
             if i>0 and self.de == "lsde": y += demb
+            if i>0 and self.de == "rde": diff = None
             y, _ = block(mask=1, query=y, key=y, values=y, diff=diff)
         flag_first = True
         for block in self.blocks_2:
