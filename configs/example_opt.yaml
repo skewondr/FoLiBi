@@ -148,7 +148,7 @@ rdemkt_config:
     inter_lambda: 0.1
     ques_lambda: 0
     choose_cl: "both"
-    only_rp: 0
+    only_rp: 1
 
   assistments09: 
     hidden_size: 64
@@ -163,7 +163,7 @@ rdemkt_config:
     inter_lambda: 0.01
     ques_lambda: 0.01
     choose_cl: "both"
-    only_rp: 0
+    only_rp: 1
 
   bridge06: 
     hidden_size: 64
@@ -178,7 +178,7 @@ rdemkt_config:
     inter_lambda: 0.01
     ques_lambda: 0.01
     choose_cl: "both"
-    only_rp: 0
+    only_rp: 1
 
   slepemapy: 
     hidden_size: 64
@@ -193,7 +193,7 @@ rdemkt_config:
     inter_lambda: 0.01
     ques_lambda: 1.0
     choose_cl: "both"
-    only_rp: 0
+    only_rp: 1
 
 train_config:
   l2: 0.0

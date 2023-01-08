@@ -151,11 +151,11 @@ class CL4KT(Module):
             if not self.only_rp:
                 ques_i_embed = self.question_embed(q_i)
                 ques_j_embed = self.question_embed(q_j)
-                inter_i_embed, _ = self.get_interaction_embed(q_i, r_i, diff_i)
-                inter_j_embed, _ = self.get_interaction_embed(q_j, r_j, diff_j)
+                inter_i_embed, i_demb = self.get_interaction_embed(q_i, r_i, diff_i)
+                inter_j_embed, j_demb = self.get_interaction_embed(q_j, r_j, diff_j)
                 if self.negative_prob > 0:
                     # inter_k_embed = self.get_negative_interaction_embed(q, r) # hard negative
-                    inter_k_embed, _ = self.get_interaction_embed(q, neg_r, diff)
+                    inter_k_embed, neg_demb = self.get_interaction_embed(q, neg_r, diff)
 
                 # mask=2 means bidirectional attention of BERT
                 ques_i_score, ques_j_score = ques_i_embed, ques_j_embed
@@ -180,7 +180,10 @@ class CL4KT(Module):
                         )
                 if self.choose_cl in ["s_cl", "both"]:
 
-                    for block in self.interaction_encoder:
+                    for i, block in enumerate(self.interaction_encoder):
+                        if i>0 and self.de == "lsde": 
+                            inter_i_score += i_demb
+                            inter_j_score += j_demb
                         inter_i_score, _ = block(
                             mask=2,
                             query=inter_i_score,
@@ -198,6 +201,8 @@ class CL4KT(Module):
                             apply_pos=False,
                         )
                         if self.negative_prob > 0:
+                            if i>0 and self.de == "lsde": 
+                                inter_k_score += neg_demb
                             inter_k_score, _ = block(
                                 mask=2,
                                 query=inter_k_embed,

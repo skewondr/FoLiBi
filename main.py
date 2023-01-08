@@ -420,8 +420,8 @@ if __name__ == "__main__":
     parser.add_argument("--de_type", type=str, default="none_0", help="sde, rde")
     parser.add_argument("--sparsity", type=float, default=1.0, help="sparsity of difficulty in valid/test dataset")
     
-    parser.add_argument("--total_cnt_init", type=int, default=1, help="total_cnt_init")
-    parser.add_argument("--diff_unk", type=float, default=0.0, help="diff_unk")
+    parser.add_argument("--total_cnt_init", type=int, default=0, help="total_cnt_init")
+    parser.add_argument("--diff_unk", type=float, default=0.5, help="diff_unk")
     
     parser.add_argument("--gpu_num", type=int, required=True, help="gpu number")
     parser.add_argument("--server_num", type=int, required=True, help="server number")
