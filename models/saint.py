@@ -94,6 +94,7 @@ class SAINT(nn.Module):
         
         for i in range(self.num_de):
             if i>0 and self.de == "lsde": out += demb 
+            if i>0 and self.de == "rde": diff_ox = None
             out = self.decoder[i](out, en_out=in_ex, diff=diff_ox)
         
         ## Output layer

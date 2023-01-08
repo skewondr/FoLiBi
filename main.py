@@ -445,7 +445,7 @@ if __name__ == "__main__":
     cfg.total_cnt_init = args.total_cnt_init
     cfg.diff_unk = args.diff_unk
     
-    assert args.de_type in ["sde", "lsde", "rde", "lrde", "none"], "de_type error! not in [sde, lsde, rde, lrde, none]"
+    assert args.de_type.split('_')[0] in ["sde", "lsde", "rde", "lrde", "none"], "de_type error! not in [sde, lsde, rde, lrde, none]"
 
     if args.model_name == "cl4kt":
         cfg.cl4kt_config = cfg.cl4kt_config[cfg.data_name]
