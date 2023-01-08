@@ -1,7 +1,7 @@
 import torch
 
-from torch.nn import Module, Embedding, Linear, MultiheadAttention, LayerNorm, Dropout, BCELoss
-from .modules import transformer_FFN, pos_encode, ut_mask, get_clones, MultiHeadAttention_Rotary
+from torch.nn import Module, Embedding, Linear, LayerNorm, Dropout, BCELoss
+from .modules import transformer_FFN, pos_encode, ut_mask, get_clones, MultiheadAttention
 from .rpe import SinusoidalPositionalEmbeddings 
 
 if torch.cuda.is_available():
@@ -67,7 +67,7 @@ class SAKT(Module):
         if self.de in ["sde", "lsde"]:
             diffx = self.token_num + diff * (r > -1).long()
             diffo = diff * (r > -1).int()
-            diffox = torch.where(r == 1 ,diffo, diffx)
+            diffox = torch.where(r == 0 ,diffo, diffx)
             demb = self.diff_emb(diffox).float()
             xemb += demb
             return qshftemb, xemb, demb
@@ -83,10 +83,10 @@ class SAKT(Module):
         
         if self.token_num < 1000 :  
             diff = torch.ceil(diff * (self.token_num-1)).long()
-            diff_ox = torch.where(r == 1 , (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
+            diff_ox = torch.where(r == 0 , (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
         else:
             diff = diff * 100
-            diff_ox = torch.where(r == 1 , (diff - 100) * (r > -1).int(), diff * (r > -1).int())
+            diff_ox = torch.where(r == 0 , (diff - 100) * (r > -1).int(), diff * (r > -1).int())
             
         qshftemb, xemb, demb = self.base_emb(q, r, qry, pos, diff)
         
@@ -114,7 +114,7 @@ class Blocks(Module):
         self.device = device
         self.rotary  = rotary
         if self.rotary in ["qkv", "none"]:
-            self.attn = MultiHeadAttention_Rotary(embedding_size, num_attn_heads, dropout=dropout, rotary=rotary)
+            self.attn = MultiheadAttention(embedding_size, num_attn_heads, dropout=dropout, rotary=rotary)
         else:
             self.attn = MultiheadAttention(embedding_size, num_attn_heads, dropout=dropout)
         self.attn_dropout = Dropout(dropout)
@@ -125,18 +125,9 @@ class Blocks(Module):
         self.FFN_layer_norm = LayerNorm(embedding_size)
 
     def forward(self, q=None, k=None, v=None, diff=None):
-        if self.rotary in ["qkv", "none"]:
-            causal_mask = ut_mask(self.device, seq_len = k.shape[1])
-            causal_mask = ~causal_mask  
-            attn_emb, _ = self.attn(q, k, v, diff=diff, mask=causal_mask)
-            attn_emb = self.attn_dropout(attn_emb)
-        else:
-            q, k, v = q.permute(1, 0, 2), k.permute(1, 0, 2), v.permute(1, 0, 2)
-            causal_mask = ut_mask(self.device, seq_len = k.shape[0])
-            attn_emb, _ = self.attn(q, k, v, attn_mask=causal_mask)
-            attn_emb = self.attn_dropout(attn_emb)
-            attn_emb, q = attn_emb.permute(1, 0, 2), q.permute(1, 0, 2)
-
+        causal_mask = ut_mask(self.device, seq_len = k.shape[1])
+        attn_emb, _ = self.attn(q, k, v, diff=diff, mask=~causal_mask)
+        attn_emb = self.attn_dropout(attn_emb)
         attn_emb = self.attn_layer_norm(q + attn_emb)
 
         emb = self.FFN(attn_emb)

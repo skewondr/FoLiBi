@@ -131,16 +131,16 @@ class CL4KT(Module):
                 diff_i = torch.ceil(diff_i * (self.token_num-1)).long()
                 diff_j = torch.ceil(diff_j * (self.token_num-1)).long()
                 diff = torch.ceil(diff * (self.token_num-1)).long()
-                s_diff_ox = torch.where(r == 1 ,  (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
-                si_diff_ox = torch.where(r_i == 1 , (diff_i - self.token_num) * (r_i > -1).int(), diff_i * (r_i > -1).int())
-                sj_diff_ox = torch.where(r_j == 1 , (diff_j - self.token_num) * (r_j > -1).int(), diff_j * (r_j > -1).int())
-                neg_diff = torch.where(neg_r == 1 , (diff - self.token_num) * (neg_r > -1).int(), diff * (neg_r > -1).int())
+                s_diff_ox = torch.where(r == 0 ,  (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
+                si_diff_ox = torch.where(r_i == 0 , (diff_i - self.token_num) * (r_i > -1).int(), diff_i * (r_i > -1).int())
+                sj_diff_ox = torch.where(r_j == 0 , (diff_j - self.token_num) * (r_j > -1).int(), diff_j * (r_j > -1).int())
+                neg_diff = torch.where(neg_r == 0 , (diff - self.token_num) * (neg_r > -1).int(), diff * (neg_r > -1).int())
             else:
                 diff_i, diff_j, diff = diff_i*100, diff_j*100, diff*100
-                s_diff_ox = torch.where(r == 1 ,  (diff - 100) * (r > -1).int(), diff * (r > -1).int())
-                si_diff_ox = torch.where(r_i == 1 , (diff_i - 100) * (r_i > -1).int(), diff_i * (r_i > -1).int())
-                sj_diff_ox = torch.where(r_j == 1 , (diff_j - 100) * (r_j > -1).int(), diff_j * (r_j > -1).int())
-                neg_diff = torch.where(neg_r == 1 , (diff - 100) * (neg_r > -1).int(), diff * (neg_r > -1).int())
+                s_diff_ox = torch.where(r == 0 ,  (diff - 100) * (r > -1).int(), diff * (r > -1).int())
+                si_diff_ox = torch.where(r_i == 0 , (diff_i - 100) * (r_i > -1).int(), diff_i * (r_i > -1).int())
+                sj_diff_ox = torch.where(r_j == 0 , (diff_j - 100) * (r_j > -1).int(), diff_j * (r_j > -1).int())
+                neg_diff = torch.where(neg_r == 0 , (diff - 100) * (neg_r > -1).int(), diff * (neg_r > -1).int())
             
             attention_mask_i, attention_mask_j, attention_mask = batch["attention_mask"]
 
@@ -269,10 +269,10 @@ class CL4KT(Module):
             
             if self.token_num < 1000 :  
                 diff = torch.ceil(diff * (self.token_num-1)).long()
-                s_diff_ox = torch.where(r == 1 ,  (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
+                s_diff_ox = torch.where(r == 0 ,  (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
             else:
                 diff = diff * 100
-                s_diff_ox = torch.where(r == 1 ,  (diff - 100) * (r > -1).int(), diff * (r > -1).int())
+                s_diff_ox = torch.where(r == 0 ,  (diff - 100) * (r > -1).int(), diff * (r > -1).int())
             
             question_cl_loss, interaction_cl_loss = 0, 0
 
@@ -341,7 +341,7 @@ class CL4KT(Module):
         if self.de in ["sde", "lsde"]:
             diffx = self.token_num + diff * (responses > -1).long()
             diffo = diff * (responses > -1).int()
-            diffox = torch.where(responses == 1 ,diffo, diffx)
+            diffox = torch.where(responses == 0 ,diffo, diffx)
             demb = self.diff_emb(diffox).float()
             output += demb
             return output, demb

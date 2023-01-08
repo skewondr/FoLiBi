@@ -135,7 +135,7 @@ class RDEMKT(Module):
                             apply_pos=False,
                         )
                 if self.choose_cl in ["s_cl", "both"]:
-                    si_diff_ox = torch.where(r == 1 , (diff - 1) * (r > -1).int(), diff * (r > -1).int())
+                    si_diff_ox = torch.where(r == 0 , (diff - 1) * (r > -1).int(), diff * (r > -1).int())
                     for block in self.interaction_encoder:
                         inter_i_score, _ = block(
                             mask=2,
@@ -183,7 +183,7 @@ class RDEMKT(Module):
         # elif self.choose_cl == "s_rp":
         diff_o = (diff - 1) * (r > -1).int()
         diff_x = diff * (r > -1).int()
-        s_rotary = torch.where(r == 1 , diff_o, diff_x)
+        s_rotary = torch.where(r == 0 , diff_o, diff_x)
         # else:
         #     diff_o = (diff - 1) * (r > -1).int()
         #     diff_x = diff * (r > -1).int()

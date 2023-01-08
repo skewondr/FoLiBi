@@ -410,13 +410,11 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
     parser.add_argument("--optimizer", type=str, default="adam", help="optimizer")
     
-    parser.add_argument("--de_type", type=str, default="", help="sde, rde")
+    parser.add_argument("--de_type", type=str, default="none_0", help="sde, rde")
     parser.add_argument("--sparsity", type=float, default=1.0, help="sparsity of difficulty in valid/test dataset")
     
     parser.add_argument("--total_cnt_init", type=int, default=1, help="total_cnt_init")
     parser.add_argument("--diff_unk", type=float, default=0.0, help="diff_unk")
-    
-
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")

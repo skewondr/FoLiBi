@@ -134,10 +134,10 @@ class AKT(Module):
         
         if self.token_num < 1000 :  
             diff = torch.ceil(diff * (self.token_num-1)).long()
-            diff_ox = torch.where(r == 1 , (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
+            diff_ox = torch.where(r == 0 , (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
         else:
             diff = diff * 100
-            diff_ox = torch.where(r == 1 , (diff - 100) * (r > -1).int(), diff * (r > -1).int())
+            diff_ox = torch.where(r == 0 , (diff - 100) * (r > -1).int(), diff * (r > -1).int())
 
         q_embed_data = self.q_embed(q)  # c_{c_t}: [batch_size, seq_len, embedding_size]
         if self.separate_qr:
@@ -165,7 +165,7 @@ class AKT(Module):
                 if self.de in ["sde", "lsde"]:
                     diffx = self.token_num + diff * (r > -1).long()
                     diffo = diff * (r > -1).int()
-                    diffox = torch.where(r == 1 ,diffo, diffx)
+                    diffox = torch.where(r == 0 ,diffo, diffx)
                     demb = self.diff_emb(diffox).float()
                     qr_embed_data += demb
                 elif self.de in ["rde"]:
