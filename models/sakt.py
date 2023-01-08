@@ -43,13 +43,15 @@ class SAKT(Module):
         self.position_emb = Embedding(seq_len + 1, embedding_size, padding_idx=0)
 
         self.de = de_type.split('_')[0]
+        assert self.de not in ["lsde", "lrde"], "de_type error! should not in [lsde, lrde]"
         self.token_num = int(de_type.split('_')[1])
-        if self.de in ["sde", "lsde"]:
+        
+        if self.de in ["sde"]:
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
             rotary = "none"
-        elif self.de == "rde":
-            rotary = "qkv"
+        elif self.de in ["rde"]:
+            rotary = "kv"
         else: 
             rotary = "none"
 
@@ -64,7 +66,7 @@ class SAKT(Module):
         qshftemb, xemb = self.exercise_emb(qry), self.interaction_emb(x)
         posemb = self.position_emb(pos)
         xemb = xemb + posemb
-        if self.de in ["sde", "lsde"]:
+        if self.de in ["sde"]:
             diffx = (self.token_num+1) + diff * (r > -1).long()
             diffo = diff * (r > -1).int()
             diffox = torch.where(r == 0 ,diffo, diffx)
@@ -92,7 +94,6 @@ class SAKT(Module):
         qshftemb, xemb, demb = self.base_emb(q, r, qry, pos, diff)
         
         for i in range(self.num_blocks): #sakt's num_blocks = 1
-            if i>0 and self.de == "lsde": xemb += demb
             xemb = self.blocks[i](qshftemb, xemb, xemb, diff_ox)
             
         p = torch.sigmoid(self.pred(self.dropout_layer(xemb))).squeeze(-1)
@@ -114,7 +115,7 @@ class Blocks(Module):
         super().__init__()
         self.device = device
         self.rotary  = rotary
-        if self.rotary in ["qkv", "none"]:
+        if self.rotary in ["kv"]:
             self.attn = MultiheadAttention(embedding_size, num_attn_heads, dropout=dropout, rotary=rotary)
         else:
             self.attn = MultiheadAttention(embedding_size, num_attn_heads, dropout=dropout)
