@@ -169,7 +169,7 @@ class AKT(Module):
                     diffox = torch.where(r == 0 ,diffo, diffx)
                     demb = self.diff_emb(diffox).float()
                     qr_embed_data += demb
-                elif self.de in ["rde"]:
+                elif self.de in ["rde", "lrde"]:
                     demb = None
                 else:
                     demb = None

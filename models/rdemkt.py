@@ -58,7 +58,7 @@ class RDEMKT(Module):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), self.hidden_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
             rotary = "none"
-        elif self.de == "rde":
+        elif self.de in ["rde", "lrde"]:
             rotary = "qkv"
         else: 
             rotary = "none"
@@ -157,6 +157,7 @@ class RDEMKT(Module):
                 if self.choose_cl in ["s_cl", "both"]:
                     for i, block in enumerate(self.interaction_encoder):
                         if i>0 and self.de == "lsde": inter_i_score += i_demb 
+                        if i>0 and self.de == "rde": si_diff_ox = None
                         inter_i_score, _ = block(
                             mask=2,
                             query=inter_i_embed,
@@ -210,6 +211,7 @@ class RDEMKT(Module):
 
         for i, block in enumerate(self.interaction_encoder):
             if i>0 and self.de == "lsde": y += demb 
+            if i>0 and self.de == "rde": s_diff_ox = None
             y, _ = block(mask=1, query=y, key=y, values=y, diff=s_diff_ox, apply_pos=True)
 
         for block in self.knoweldge_retriever:
