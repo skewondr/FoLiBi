@@ -147,8 +147,11 @@ class RotaryPositionalEmbeddings(nn.Module):
         # t : [batch, head, seq_len, head_dim]
         # diff : [batch, seq_len]
         # self.freqs : [max_pos, head_dim]
-        self.freqs = self.freqs.to(t) # device matching 
-        diff_freqs = (diff*100).repeat(1,head_num*head_dim).view(b, head_num, s, head_dim)*self.freqs.squeeze() #[ batch, head, seq_len, head_dim ]
+        self.freqs = self.freqs.to(t) # device matching
+
+        diff_freqs = diff.repeat(1, head_num*head_dim).view(b, head_num, head_dim, s).transpose(2,3)
+        diff_freqs = diff_freqs*self.freqs.squeeze() #[ batch, head, seq_len, head_dim ]
+
         rot_dim = self.freqs.shape[-1]
         end_index = start_index + rot_dim
         assert rot_dim <= t.shape[-1], f'feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}'
