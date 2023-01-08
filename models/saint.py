@@ -30,7 +30,7 @@ class SAINT(nn.Module):
         self.de = de_type.split('_')[0]
         self.token_num = int(de_type.split('_')[1])
         if self.de in ["sde", "lsde"]:
-            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*self.token_num, embedding_size)).to(device)
+            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
             rotary = "none"
         elif self.de == "rde":
@@ -74,19 +74,20 @@ class SAINT(nn.Module):
         diff = torch.cat((diff_token, diff), dim=-1)
         first_block = True
         
-        if self.token_num < 1000 :  
-            diff = torch.ceil(diff * (self.token_num-1)).long()
-            diff_ox = torch.where(r == 0 , (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
+        if self.token_num < 1000:
+            boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
+            diff = torch.bucketize(diff, boundaries)
+            diff_ox = torch.where(r==0 , diff-(self.token_num+1), diff)  
         else:
             diff = diff * 100
-            diff_ox = torch.where(r == 0 , (diff - 100) * (r > -1).int(), diff * (r > -1).int())
+            diff_ox = torch.where(r==0 , diff-(100+1), diff)
             
-         ## todo create a positional encoding (two options numeric, sine)
+        ## todo create a positional encoding (two options numeric, sine)
         #combining the embedings
         out = self.embd_res(in_res) + in_pos                         # (b,n,d)
         if self.de in ["sde", "lsde"]:
-            diffx = self.token_num + diff * (r > -1).long()
-            diffo = diff * (r > -1).int()
+            diffx = (self.token_num+1) + diff 
+            diffo = diff
             diffox = torch.where(r == 0 ,diffo, diffx)
             demb = self.diff_emb(diffox).float()
             out += demb

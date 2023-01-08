@@ -56,7 +56,7 @@ class CL4KT(Module):
         self.sim = Similarity(temp=self.args["temp"])
 
         if self.de in ["sde", "lsde"]:
-            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*self.token_num, self.hidden_size)).to(device)
+            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), self.hidden_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
             rotary = "none"
         elif self.de == "rde":
@@ -127,21 +127,25 @@ class CL4KT(Module):
                 "responses"
             ]  # augmented r_i, augmented r_j and original r
             diff_i, diff_j, diff = batch["sdiff"]
-            if self.token_num < 1000 :  
-                diff_i = torch.ceil(diff_i * (self.token_num-1)).long()
-                diff_j = torch.ceil(diff_j * (self.token_num-1)).long()
-                diff = torch.ceil(diff * (self.token_num-1)).long()
-                s_diff_ox = torch.where(r == 0 ,  (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
-                si_diff_ox = torch.where(r_i == 0 , (diff_i - self.token_num) * (r_i > -1).int(), diff_i * (r_i > -1).int())
-                sj_diff_ox = torch.where(r_j == 0 , (diff_j - self.token_num) * (r_j > -1).int(), diff_j * (r_j > -1).int())
-                neg_diff = torch.where(neg_r == 0 , (diff - self.token_num) * (neg_r > -1).int(), diff * (neg_r > -1).int())
-            else:
-                diff_i, diff_j, diff = diff_i*100, diff_j*100, diff*100
-                s_diff_ox = torch.where(r == 0 ,  (diff - 100) * (r > -1).int(), diff * (r > -1).int())
-                si_diff_ox = torch.where(r_i == 0 , (diff_i - 100) * (r_i > -1).int(), diff_i * (r_i > -1).int())
-                sj_diff_ox = torch.where(r_j == 0 , (diff_j - 100) * (r_j > -1).int(), diff_j * (r_j > -1).int())
-                neg_diff = torch.where(neg_r == 0 , (diff - 100) * (neg_r > -1).int(), diff * (neg_r > -1).int())
             
+            if self.token_num < 1000:
+                boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
+                diff = torch.bucketize(diff, boundaries)
+                diff_i = torch.bucketize(diff_i, boundaries)
+                diff_j = torch.bucketize(diff_j, boundaries)
+                s_diff_ox = torch.where(r == 0 ,  (diff -(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())
+                si_diff_ox = torch.where(r_i == 0 , (diff_i -(self.token_num+1)) * (r_i > -1).int(), diff_i * (r_i > -1).int())
+                sj_diff_ox = torch.where(r_j == 0 , (diff_j -(self.token_num+1)) * (r_j > -1).int(), diff_j * (r_j > -1).int())
+                neg_diff = torch.where(neg_r == 1 , (diff -(self.token_num+1)) * (neg_r > -1).int(), diff * (neg_r > -1).int())
+            else:
+                diff = diff * 100
+                diff_i = diff_i * 100
+                diff_j = diff_j * 100
+                s_diff_ox = torch.where(r == 0 , (diff-(100+1)) * (r > -1).int(), diff * (r > -1).int())
+                si_diff_ox = torch.where(r_i == 0 , (diff_i -(100+1)) * (r_i > -1).int(), diff_i * (r_i > -1).int())
+                sj_diff_ox = torch.where(r_j == 0 , (diff_j -(100+1)) * (r_j > -1).int(), diff_j * (r_j > -1).int())
+                neg_diff = torch.where(neg_r == 1 , (diff -(100+1)) * (neg_r > -1).int(), diff * (neg_r > -1).int())
+                
             attention_mask_i, attention_mask_j, attention_mask = batch["attention_mask"]
 
             if not self.only_rp:
@@ -267,15 +271,15 @@ class CL4KT(Module):
             attention_mask = batch["attention_mask"]
             diff = batch["sdiff"]
             
-            if self.token_num < 1000 :  
-                diff = torch.ceil(diff * (self.token_num-1)).long()
-                s_diff_ox = torch.where(r == 0 ,  (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
+            if self.token_num < 1000:
+                boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
+                diff = torch.bucketize(diff, boundaries)
+                s_diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
             else:
                 diff = diff * 100
-                s_diff_ox = torch.where(r == 0 ,  (diff - 100) * (r > -1).int(), diff * (r > -1).int())
-            
+                s_diff_ox = torch.where(r==0 , (diff-(100+1)) * (r > -1).int(), diff * (r > -1).int())
+                
             question_cl_loss, interaction_cl_loss = 0, 0
-
 
         q_embed = self.question_embed(q)
         i_embed, demb = self.get_interaction_embed(q, r, diff)
@@ -339,7 +343,7 @@ class CL4KT(Module):
         interactions = skills + self.num_skills * masked_responses
         output = self.interaction_embed(interactions)
         if self.de in ["sde", "lsde"]:
-            diffx = self.token_num + diff * (responses > -1).long()
+            diffx = (self.token_num+1) + diff * (responses > -1).long()
             diffo = diff * (responses > -1).int()
             diffox = torch.where(responses == 0 ,diffo, diffx)
             demb = self.diff_emb(diffox).float()

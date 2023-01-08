@@ -85,7 +85,7 @@ class AKT(Module):
         self.de = de_type.split('_')[0]
         self.token_num = int(de_type.split('_')[1])
         if self.de in ["sde", "lsde"]:
-            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*self.token_num, embedding_size)).to(device)
+            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
             rotary = "none"
         elif self.de == "rde":
@@ -132,12 +132,13 @@ class AKT(Module):
         pid_data = feed_dict["questions"]
         diff = feed_dict["sdiff"]
         
-        if self.token_num < 1000 :  
-            diff = torch.ceil(diff * (self.token_num-1)).long()
-            diff_ox = torch.where(r == 0 , (diff - self.token_num) * (r > -1).int(), diff * (r > -1).int())
+        if self.token_num < 1000:
+            boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
+            diff = torch.bucketize(diff, boundaries)
+            diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
         else:
             diff = diff * 100
-            diff_ox = torch.where(r == 0 , (diff - 100) * (r > -1).int(), diff * (r > -1).int())
+            diff_ox = torch.where(r==0 , (diff-(100+1)) * (r > -1).int(), diff * (r > -1).int())
 
         q_embed_data = self.q_embed(q)  # c_{c_t}: [batch_size, seq_len, embedding_size]
         if self.separate_qr:
@@ -163,7 +164,7 @@ class AKT(Module):
                 # f_{(c_t, r_t)} = f_{(c_t, r_t)} + d_{c_t}
                 # e_{(c_t, r_t)} + \mu_{q_t} * (h_{r_t} + d_{c_t})
                 if self.de in ["sde", "lsde"]:
-                    diffx = self.token_num + diff * (r > -1).long()
+                    diffx = (self.token_num+1) + diff * (r > -1).long()
                     diffo = diff * (r > -1).int()
                     diffox = torch.where(r == 0 ,diffo, diffx)
                     demb = self.diff_emb(diffox).float()
