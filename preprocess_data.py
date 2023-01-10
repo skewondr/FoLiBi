@@ -475,14 +475,13 @@ def prepare_sampled_ednet(min_user_inter_num, kc_col_name, remove_nan_skills):
     df = df[user_questions.isin(all_questions)].dropna()
     #get skill_id
     skill_df = pd.merge(df, content_df.loc[:,["question_id", "correct_answer", "tags"]], how='outer', on="question_id").dropna()
-    
     #get correct
     actual_ans = skill_df["correct_answer"].values
     user_ans = skill_df["user_answer"].values
-    df['correct'] = np.array(actual_ans == user_ans).astype(int)
+    skill_df['correct'] = np.array(actual_ans == user_ans).astype(int)
 
     #get item_id
-    df["item_id"] = df["question_id"].str.extract(r'(\d+)')
+    skill_df["item_id"] = skill_df["question_id"].str.extract(r'(\d+)')
 
     # Extract KCs
     kc_list = []
@@ -493,49 +492,33 @@ def prepare_sampled_ednet(min_user_inter_num, kc_col_name, remove_nan_skills):
     kc2idx = {kc: i for i, kc in enumerate(kc_set)}
 
     # Adujust dtypes
-    df = df.astype(
+    skill_df = skill_df.astype(
         {"correct": np.float64, "timestamp": np.float64}
     )
 
     # user, item, skill re-index
-    df["user_id"] = np.unique(df["user_id"], return_inverse=True)[1]
-    df["item_id"] = np.unique(df["item_id"], return_inverse=True)[1]
-    df['skill_id'] = skill_df["tags"].values
+    skill_df["user_id"] = np.unique(skill_df["user_id"], return_inverse=True)[1]
+    skill_df["item_id"] = np.unique(skill_df["item_id"], return_inverse=True)[1]
+    skill_df["skill_id"] = np.unique(skill_df["tags"], return_inverse=True)[1]
     
-    print("# Users: {}".format(df["user_id"].nunique()))
+    print("# Users: {}".format(skill_df["user_id"].nunique()))
     print("# Skills: {}".format(len(kc2idx)))
-    print("# Items: {}".format(df["item_id"].nunique()))
-    print("# Interactions: {}".format(len(df)))
-
-    # Build Q-matrix
-    Q_mat = np.zeros((len(df["item_id"].unique()), len(kc_set)))
-    for item_id, kc_str in df[["item_id", "skill_id"]].values:
-        for kc in kc_str.split(";"):
-            Q_mat[item_id, kc2idx[kc]] = 1
-
-    # Get unique skill id from combination of all skill ids
-    unique_skill_ids = np.unique(Q_mat, axis=0, return_inverse=True)[1]
-    df["skill_id"] = unique_skill_ids[df["item_id"]]
-
-    print("# Preprocessed Skills: {}".format(df["skill_id"].nunique()))
+    print("# Preprocessed Skills: {}".format(skill_df["skill_id"].nunique()))
+    print("# Items: {}".format(skill_df["item_id"].nunique()))
+    print("# Interactions: {}".format(len(skill_df)))
 
     # Sort data temporally
-    df.drop_duplicates(subset=["user_id", "item_id", "timestamp"], inplace=True)
-    df.sort_values(by="timestamp", inplace=True)
+    skill_df.drop_duplicates(subset=["user_id", "item_id", "timestamp"], inplace=True)
+    skill_df.sort_values(by="timestamp", inplace=True)
 
     # Sort data by users, preserving temporal order for each user
     data_path = os.path.join(BASE_PATH, "ednet/")
     df = pd.concat([u_df for _, u_df in df.groupby("user_id")])
     df.to_csv(os.path.join(data_path, "original_df.csv"), sep="\t", index=False)
 
-    # Save data
-    with open(os.path.join(data_path, "question_skill_rel.pkl"), "wb") as f:
-        pickle.dump(csr_matrix(Q_mat), f)
-    sparse.save_npz(os.path.join(data_path, "q_mat.npz"), csr_matrix(Q_mat))
-    
-    df = df[["user_id", "item_id", "timestamp", "correct", "skill_id"]]
-    df.reset_index(inplace=True, drop=True)
-    df.to_csv(os.path.join(data_path, "preprocessed_df.csv"), sep="\t", index=False)
+    skill_df = skill_df[["user_id", "item_id", "timestamp", "correct", "skill_id"]]
+    skill_df.reset_index(inplace=True, drop=True)
+    skill_df.to_csv(os.path.join(data_path, "preprocessed_df.csv"), sep="\t", index=False)
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Preprocess DKT datasets")
