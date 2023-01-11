@@ -51,7 +51,7 @@ class RDEMKT(Module):
             self.num_skills + 2, self.hidden_size, padding_idx=0
         )
         self.response_embed = Embedding(
-            2+1, self.hidden_size, padding_idx=0
+            2, self.hidden_size,
         )
         # self.interaction_embed = Embedding(
         #     2 * (self.num_skills + 2), self.hidden_size, padding_idx=0
@@ -274,8 +274,8 @@ class RDEMKT(Module):
 
     def get_interaction_embed(self, skills, responses, diff=None):
         masked_responses = responses * (responses > -1).long()
-        interactions = skills + self.num_skills * masked_responses
-        output = self.interaction_embed(interactions)
+        # interactions = skills + self.num_skills * masked_responses
+        output = self.question_embed(skills) + self.response_embed(masked_responses)
         if self.de in ["sde", "lsde"]:
             diffx = (self.token_num+1) + diff * (responses > -1).long()
             diffo = diff * (responses > -1).int()
