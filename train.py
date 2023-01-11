@@ -21,8 +21,10 @@ def model_train(
     train_loader,
     valid_loader,
     test_loader,
+    testb_loader,
     config,
     n_gpu,
+    balanced=0,
     early_stop=True,
 ):
     train_losses = []
@@ -123,33 +125,12 @@ def model_train(
 
         total_preds, total_trues = [], []
 
-        # evaluation on test dataset
-        with torch.no_grad():
-            for batch in test_loader:
-
-                model.eval()
-
-                out_dict = model(batch)
-
-                pred = out_dict["pred"].flatten()
-                true = out_dict["true"].flatten()
-                mask = true > -1
-                pred = pred[mask]
-                true = true[mask]
-
-                total_preds.append(pred)
-                total_trues.append(true)
-
-            total_preds = torch.cat(total_preds).squeeze(-1).detach().cpu().numpy()
-            total_trues = torch.cat(total_trues).squeeze(-1).detach().cpu().numpy()
-
-        test_auc = roc_auc_score(y_true=total_trues, y_score=total_preds)
-
         print(
-            "Fold {}:\t Epoch {}\t\tTRAIN LOSS: {:.5f}\tVALID AUC: {:.5f}\tTEST AUC: {:.5f}".format(
-                fold, i, train_loss, valid_auc, test_auc
+            "Fold {}:\t Epoch {}\t\tTRAIN LOSS: {:.5f}\tVALID AUC: {:.5f}\t".format(
+                fold, i, train_loss, valid_auc
             )
         )
+        
     checkpoint = torch.load(
         os.path.join(
             os.path.join("saved_model", model_name, data_name, time_now),
@@ -160,7 +141,7 @@ def model_train(
     model.load_state_dict(checkpoint["model_state_dict"])
 
     total_preds, total_trues = [], []
-    total_q_embeds, total_qr_embeds = [], []
+    
     # evaluation on test dataset
     with torch.no_grad():
         for batch in test_loader:
@@ -189,6 +170,42 @@ def model_train(
             auc, acc, rmse
         )
     )
+    
+    if balanced:
+        total_preds, total_trues = [], []
+        
+        # evaluation on test dataset
+        with torch.no_grad():
+            for batch in testb_loader:
+
+                model.eval()
+
+                out_dict = model(batch)
+
+                pred = out_dict["pred"].flatten()
+                true = out_dict["true"].flatten()
+                mask = true > -1
+                pred = pred[mask]
+                true = true[mask]
+                total_preds.append(pred)
+                total_trues.append(true)
+
+            total_preds = torch.cat(total_preds).squeeze(-1).detach().cpu().numpy()
+            total_trues = torch.cat(total_trues).squeeze(-1).detach().cpu().numpy()
+
+        aucB = roc_auc_score(y_true=total_trues, y_score=total_preds)
+        accB = accuracy_score(y_true=total_trues >= 0.5, y_pred=total_preds >= 0.5)
+        rmseB = np.sqrt(mean_squared_error(y_true=total_trues, y_pred=total_preds))
+
+        print(
+            "Best Model\tTEST_B AUC: {:.5f}\tTEST_B ACC: {:5f}\tTEST_B RMSE: {:5f}".format(
+                aucB, accB, rmseB
+            )
+        )
+        return [auc, acc, rmse], [aucB, accB, rmseB]
+    else:
+        return [auc, acc, rmse], None
+        
 
     # logs_df = logs_df.append(
     #     pd.DataFrame(
@@ -204,4 +221,3 @@ def model_train(
     #     os.path.join(log_out_path, "{}_{}.csv".format(model_name, now)), index=False
     # )
 
-    return auc, acc, rmse

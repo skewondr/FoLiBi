@@ -29,42 +29,6 @@ import time
 from time import localtime 
 import statistics 
 
-def get_diff_df(df, num_skills, num_questions, total_cnt_init=1, diff_unk=0.0):
-    q_total_cnt = np.ones((num_questions+1))
-    q_crt_cnt = np.zeros((num_questions+1))
-
-    c_total_cnt = np.ones((num_skills+1))
-    c_crt_cnt = np.zeros((num_skills+1))
-    
-    if total_cnt_init == 0:
-        q_total_cnt = np.zeros((num_questions+1))
-        c_total_cnt = np.zeros((num_skills+1))
-
-    for q, c, r in zip(df["item_id"], df["skill_id"], df["correct"]):
-        c_total_cnt[c] += 1
-        if r:
-            c_crt_cnt[c] += 1
-        q_total_cnt[q] += 1
-        if r:
-            q_crt_cnt[q] += 1
-
-    if diff_unk != 0.0: ## else unk is zero
-        q_crt_cnt[np.where(q_total_cnt == total_cnt_init)] = diff_unk
-        c_crt_cnt[np.where(c_total_cnt == total_cnt_init)] = diff_unk
-
-    if total_cnt_init == 0:
-        q_total_cnt = np.where(q_total_cnt == 0, 1, q_total_cnt)
-        c_total_cnt = np.where(c_total_cnt == 0, 1, c_total_cnt)
-
-    q_diff = q_crt_cnt/q_total_cnt
-    c_diff = c_crt_cnt/c_total_cnt
-    df = df.assign(item_diff=q_diff[np.array(df["item_id"].values)])
-    df = df.assign(skill_diff=c_diff[np.array(df["skill_id"].values)])
-    print(f"mean of skill correct ratio:{np.mean(c_diff)}")
-
-    return df
-
-
 def main(config):
 
     tm = localtime(time.time())
@@ -108,7 +72,8 @@ def main(config):
     seq_len = train_config.seq_len
     diff_order = train_config.diff_order
     sparsity = train_config.sparsity
-
+    balanced = train_config.balanced
+    
     if train_config.sequence_option == "recent":  # the most recent N interactions
         dataset = MostRecentQuestionSkillDataset
     elif train_config.sequence_option == "early":  # the most early N interactions
@@ -117,16 +82,15 @@ def main(config):
         raise NotImplementedError("sequence option is not valid")
 
     test_aucs, test_accs, test_rmses = [], [], []
+    testb_aucs, testb_accs, testb_rmses = [], [], []
 
     kfold = KFold(n_splits=5, shuffle=True, random_state=seed)
 
     df = pd.read_csv(df_path, sep="\t")
 
-    print("skill_min", df["skill_id"].min())
     users = df["user_id"].unique()
     np.random.shuffle(users)
     get_stat(data_name, df)
-
     df["skill_id"] += 1  # zero for padding
     df["item_id"] += 1  # zero for padding
     num_skills = df["skill_id"].max() + 1
@@ -176,17 +140,17 @@ def main(config):
         valid_df = df[df["user_id"].isin(valid_users)]
         test_df = df[df["user_id"].isin(test_users)]
         
-        train_df = get_diff_df(train_df, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk)
-        valid_df = get_diff_df(valid_df, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk)
-        test_df = get_diff_df(test_df, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk)
-
-        train_dataset = dataset(train_df, seq_len, num_skills, num_questions)
-        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions)
+        train_dataset = dataset(train_df, seq_len, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk, name="train")
+        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk, name="valid")
         valid_dataset.sdiff_array = train_dataset.sdiff_array.copy()
         valid_dataset.qdiff_array = train_dataset.qdiff_array.copy()
-        test_dataset = dataset(test_df, seq_len, num_skills, num_questions)
+        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk, name="test")
         test_dataset.sdiff_array = train_dataset.sdiff_array.copy()
         test_dataset.qdiff_array = train_dataset.qdiff_array.copy()
+        
+        testb_dataset = dataset(test_df, seq_len, num_skills, num_questions, balanced=balanced, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk, name="testb")
+        testb_dataset.sdiff_array = train_dataset.sdiff_array.copy()
+        testb_dataset.qdiff_array = train_dataset.qdiff_array.copy()
         
         if sparsity < 1 :
             non0_s = (train_dataset.sdiff_array!=0).nonzero()[0]
@@ -240,6 +204,15 @@ def main(config):
                     batch_size=eval_batch_size,
                 )
             )
+            
+            testb_loader = accelerator.prepare(
+                DataLoader(
+                    SimCLRDatasetWrapper(
+                        testb_dataset, seq_len, 0, 0, 0, 0, 0, eval_mode=True
+                    ),
+                    batch_size=eval_batch_size,
+                )
+            )
 
         elif model_name == "rdemkt":   
             train_loader = accelerator.prepare(
@@ -272,6 +245,15 @@ def main(config):
                     batch_size=eval_batch_size,
                 )
             )
+            
+            testb_loader = accelerator.prepare(
+                DataLoader(
+                    MKMDatasetWrapper(
+                        diff_order, testb_dataset, seq_len, 0, eval_mode=True
+                    ),
+                    batch_size=eval_batch_size,
+                )
+            )
         else:
             train_loader = accelerator.prepare(
                 DataLoader(train_dataset, batch_size=batch_size)
@@ -283,6 +265,10 @@ def main(config):
 
             test_loader = accelerator.prepare(
                 DataLoader(test_dataset, batch_size=eval_batch_size)
+            )
+            
+            testb_loader = accelerator.prepare(
+                DataLoader(testb_dataset, batch_size=eval_batch_size)
             )
 
         n_gpu = torch.cuda.device_count()
@@ -298,7 +284,7 @@ def main(config):
 
         model, opt = accelerator.prepare(model, opt)
 
-        test_auc, test_acc, test_rmse = model_train(
+        t1, t2  = model_train(
             now,
             fold,
             model,
@@ -307,13 +293,19 @@ def main(config):
             train_loader,
             valid_loader,
             test_loader,
+            testb_loader,
             config,
             n_gpu,
-        )
+            balanced=balanced,
+        ) #t1 = [test_auc, test_acc, test_rmse]
 
-        test_aucs.append(test_auc)
-        test_accs.append(test_acc)
-        test_rmses.append(test_rmse)
+        test_aucs.append(t1[0])
+        test_accs.append(t1[1])
+        test_rmses.append(t1[2])
+        if t2 is not None:
+            testb_aucs.append(t2[0])
+            testb_accs.append(t2[1])
+            testb_rmses.append(t2[2])
 
     test_auc = np.mean(test_aucs)
     test_auc_std = np.std(test_aucs)
@@ -321,18 +313,37 @@ def main(config):
     test_acc_std = np.std(test_accs)
     test_rmse = np.mean(test_rmses)
     test_rmse_std = np.std(test_rmses)
-
+    
+    if len(testb_aucs)>0 and len(testb_accs)>0 and len(testb_rmses)>0:
+        testb_auc = np.mean(testb_aucs)
+        testb_auc_std = np.std(testb_aucs)
+        testb_acc = np.mean(testb_accs)
+        testb_acc_std = np.std(testb_accs)
+        testb_rmse = np.mean(testb_rmses)
+        testb_rmse_std = np.std(testb_rmses)
+    
     print_args = model_config.copy()
     print_args["sparsity"] = sparsity
+    print_args["balanced"] = balanced
     print_args["diff_order"] = diff_order
     print_args["Model"] = model_name
     print_args["Dataset"] = data_name
+    
     print_args["auc"] = round(test_auc, 4)
     print_args["auc_std"] = round(test_auc_std, 4)
     print_args["acc"] = round(test_acc, 4)
     print_args["acc_std"] = round(test_acc_std, 4)
     print_args["rmse"] = round(test_rmse, 4)
     print_args["rmse_std"] = round(test_rmse_std, 4)
+    
+    if len(testb_aucs)>0 and len(testb_accs)>0 and len(testb_rmses)>0:
+        print_args["aucB"] = round(testb_auc, 4)
+        print_args["aucB_std"] = round(testb_auc_std, 4)
+        print_args["accB"] = round(testb_acc, 4)
+        print_args["accB_std"] = round(testb_acc_std, 4)
+        print_args["rmseB"] = round(testb_rmse, 4)
+        print_args["rmseB_std"] = round(testb_rmse_std, 4)
+    
     print_args["describe"] = train_config.describe
     print_args["gpu_num"] = train_config.gpu_num
     print_args["server_num"] = train_config.server_num
@@ -342,7 +353,8 @@ def main(config):
     print("\n5-fold CV Result")
     print("AUC\tACC\tRMSE")
     print("{:.5f}\t{:.5f}\t{:.5f}".format(test_auc, test_acc, test_rmse))
-
+    print("AUC_B\tACC_B\tRMSE_B")
+    print("{:.5f}\t{:.5f}\t{:.5f}".format(testb_auc, testb_acc, testb_rmse))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -419,6 +431,7 @@ if __name__ == "__main__":
     
     parser.add_argument("--de_type", type=str, default="none_0", help="sde, rde")
     parser.add_argument("--sparsity", type=float, default=1.0, help="sparsity of difficulty in valid/test dataset")
+    parser.add_argument("--balanced", type=int, default=0, help="set balanced testset")
     
     parser.add_argument("--total_cnt_init", type=int, default=0, help="total_cnt_init")
     parser.add_argument("--diff_unk", type=float, default=0.5, help="diff_unk")
@@ -439,6 +452,7 @@ if __name__ == "__main__":
     cfg.train_config.optimizer = args.optimizer
     cfg.train_config.describe = args.describe
     cfg.train_config.sparsity = args.sparsity
+    cfg.train_config.balanced = args.balanced
     cfg.train_config.gpu_num = args.gpu_num
     cfg.train_config.server_num = args.server_num
     

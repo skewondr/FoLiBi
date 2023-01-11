@@ -26,8 +26,8 @@ def get_stat(data_name, df=None):
 
     print("skill_min", df["skill_id"].min())
     users = df["user_id"].unique()
-    df["skill_id"] += 1  # zero for padding
-    df["item_id"] += 1  # zero for padding
+    # df["skill_id"] += 1  # zero for padding
+    # df["item_id"] += 1  # zero for padding
     num_skills, num_skills2 = df["skill_id"].max(), len(df["skill_id"].unique())
     num_questions, num_questions2 = df["item_id"].max(), len(df["item_id"].unique())
 
@@ -36,11 +36,11 @@ def get_stat(data_name, df=None):
     print(f"# question: {num_questions}, {num_questions2}")
     print(f"# interaction: {len(df)}")
 
-    # user_id	item_id	timestamp	correct	skill_id
-    diff_df = df.pivot_table(index=['correct'], columns='skill_id', aggfunc='size', fill_value=0)
-    diff_df.loc[len(diff_df.index)] = diff_df.loc[0] + diff_df.loc[1]
-    diff_df.loc[len(diff_df.index)] = diff_df.loc[1] / diff_df.loc[2] * 100
-    print(f"mean of correct ratio: {diff_df.loc[3].mean():.2f}")
+    # # user_id	item_id	timestamp	correct	skill_id
+    # diff_df = df.pivot_table(index=['correct'], columns='skill_id', aggfunc='size', fill_value=0)
+    # diff_df.loc[len(diff_df.index)] = diff_df.loc[0] + diff_df.loc[1]
+    # diff_df.loc[len(diff_df.index)] = diff_df.loc[1] / diff_df.loc[2] * 100
+    # print(f"mean of correct ratio: {diff_df.loc[3].mean():.2f}")
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Preprocess DKT datasets")
