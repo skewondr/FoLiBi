@@ -300,9 +300,11 @@ def main(config):
     print_args["rmse_std"] = round(test_rmse_std, 4)
     
     if config.use_wandb:
+        print_args['Model'] = model_name 
+        print_args['Dataset'] = data_name 
+        print_args.update(train_config)
+        print_args.update(model_config)
         wandb.log(print_args)
-        wandb.log(train_config)
-        wandb.log(model_config)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
