@@ -12,6 +12,7 @@ from data_loaders import (
     MostEarlyQuestionSkillDataset,
     SimCLRDatasetWrapper,
     MKMDatasetWrapper,
+    get_diff_df,
 )
 from models.akt import AKT
 from models.sakt import SAKT
@@ -28,11 +29,12 @@ import wandb
 import time 
 from time import localtime 
 import statistics 
+import json
 
 def main(config):
 
     tm = localtime(time.time())
-    params_str = f'{tm.tm_mon}{tm.tm_mday}{tm.tm_hour}{tm.tm_min}{tm.tm_sec}'
+    params_str = f'{tm.tm_mon}_{tm.tm_mday}_{tm.tm_hour}:{tm.tm_min}:{tm.tm_sec}'
     if config.use_wandb:
         wandb.init(project="SIGIR", entity="skewondr")
         wandb.run.name = params_str
@@ -98,7 +100,6 @@ def main(config):
 
     print("MODEL", model_name)
     print(dataset)
-    now = (datetime.now() + timedelta(hours=9)).strftime("%Y%m%d-%H%M%S") 
     for fold, (train_ids, test_ids) in enumerate(kfold.split(users)):
         # if fold > 1 : break
         if model_name == "akt":
@@ -125,8 +126,12 @@ def main(config):
             model = RDEMKT(device, num_skills, num_questions, seq_len, **model_config)
             mask_prob = model_config.mask_prob
 
-        print(train_config)
-        print(model_config)
+        dir_name = os.path.join("saved_model", model_name, data_name, params_str)
+        if not os.path.exists(dir_name):
+            os.makedirs(dir_name)
+        with open(os.path.join(dir_name, "configs.json"), 'w') as f:
+            json.dump(model_config, f)
+            json.dump(train_config, f)
 
         train_users = users[train_ids]
         np.random.shuffle(train_users)
@@ -136,21 +141,15 @@ def main(config):
         train_users = train_users[:offset]
         test_users = users[test_ids]
 
+        df = get_diff_df(df, seq_len, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk)
         train_df = df[df["user_id"].isin(train_users)]
         valid_df = df[df["user_id"].isin(valid_users)]
         test_df = df[df["user_id"].isin(test_users)]
         
-        train_dataset = dataset(train_df, seq_len, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk, name="train")
-        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk, name="valid")
-        valid_dataset.sdiff_array = train_dataset.sdiff_array.copy()
-        valid_dataset.qdiff_array = train_dataset.qdiff_array.copy()
-        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk, name="test")
-        test_dataset.sdiff_array = train_dataset.sdiff_array.copy()
-        test_dataset.qdiff_array = train_dataset.qdiff_array.copy()
-        
-        testb_dataset = dataset(test_df, seq_len, num_skills, num_questions, balanced=balanced, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk, name="testb")
-        testb_dataset.sdiff_array = train_dataset.sdiff_array.copy()
-        testb_dataset.qdiff_array = train_dataset.qdiff_array.copy()
+        train_dataset = dataset(train_df, seq_len, num_skills, num_questions, diff_df= train_df, name="train")
+        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, diff_df= train_df, name="valid")
+        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, name="test")
+        testb_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, balanced=balanced, name="testb")
         
         if sparsity < 1 :
             non0_s = (train_dataset.sdiff_array!=0).nonzero()[0]
@@ -169,6 +168,9 @@ def main(config):
         print("train_ids", len(train_users))
         print("valid_ids", len(valid_users))
         print("test_ids", len(test_users))
+        
+        print(train_config)
+        print(model_config)
 
         if model_name == "cl4kt":   
             train_loader = accelerator.prepare(
@@ -285,7 +287,7 @@ def main(config):
         model, opt = accelerator.prepare(model, opt)
 
         t1, t2  = model_train(
-            now,
+            dir_name,
             fold,
             model,
             accelerator,
@@ -329,13 +331,7 @@ def main(config):
         print("AUC_B\tACC_B\tRMSE_B")
         print("{:.5f}\t{:.5f}\t{:.5f}".format(testb_auc, testb_acc, testb_rmse))
     
-    print_args = model_config.copy()
-    print_args["sparsity"] = sparsity
-    print_args["balanced"] = balanced
-    print_args["diff_order"] = diff_order
-    print_args["Model"] = model_name
-    print_args["Dataset"] = data_name
-    
+    print_args = dict()
     print_args["auc"] = round(test_auc, 4)
     print_args["auc_std"] = round(test_auc_std, 4)
     print_args["acc"] = round(test_acc, 4)
@@ -351,11 +347,10 @@ def main(config):
         print_args["rmseB"] = round(testb_rmse, 4)
         print_args["rmseB_std"] = round(testb_rmse_std, 4)
     
-    print_args["describe"] = train_config.describe
-    print_args["gpu_num"] = train_config.gpu_num
-    print_args["server_num"] = train_config.server_num
     if config.use_wandb:
         wandb.log(print_args)
+        wandb.log(train_config)
+        wandb.log(model_config)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

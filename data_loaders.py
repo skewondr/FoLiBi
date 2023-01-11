@@ -251,7 +251,7 @@ class MKMDatasetWrapper(Dataset):
     def __getitem__(self, index):
         return self.__getitem_internal__(index)
 
-def get_diff_df(df, num_skills, num_questions, total_cnt_init=1, diff_unk=0.0):
+def get_diff_df(df, seq_len, num_skills, num_questions, total_cnt_init=1, diff_unk=0.0):
     q_total_cnt = np.ones((num_questions+1))
     q_crt_cnt = np.zeros((num_questions+1))
 
@@ -282,47 +282,71 @@ def get_diff_df(df, num_skills, num_questions, total_cnt_init=1, diff_unk=0.0):
     c_diff = c_crt_cnt/c_total_cnt
     df = df.assign(item_diff=q_diff[np.array(df["item_id"].values)])
     df = df.assign(skill_diff=c_diff[np.array(df["skill_id"].values)])
+    
+    print("-"*80)
+    s_df = df.loc[:, ['skill_id', 'skill_diff']]
+    s_df = s_df.drop_duplicates(subset=["skill_id"]).sort_values(by='skill_id')
+    q_df = df.loc[:, ['item_id', 'item_diff']]
+    q_df = q_df.drop_duplicates(subset=["item_id"]).sort_values(by='item_id')
+
+    responses = [
+        u_df["correct"].values[-seq_len :]
+        for _, u_df in df.groupby("user_id")
+    ]
+    
+    print(f"mean of total set, skill correct ratio:{np.mean(s_df['skill_diff']*100):.2f}")
+    print(f"mean of total set, question correct ratio:{np.mean(q_df['item_diff']*100):.2f}")
+    print(f"mean of total set, class 0 ratio:{sum(list(x).count(0) for x in responses)/sum(len(x) for x in responses):.2f}")
+    print(f"mean of total set, class 1 ratio:{sum(list(x).count(1) for x in responses)/sum(len(x) for x in responses):.2f}")
+    print("-"*80)
 
     return df
 
+def get_balanced(seq_len, rm_index, objects): 
+    output = [i for idx, i in enumerate(objects) if idx not in rm_index]
+    return output[-seq_len :]
+
 class MostRecentQuestionSkillDataset(Dataset):
-    def __init__(self, df, seq_len, num_skills, num_questions, balanced=0, total_cnt_init=1, diff_unk=0.0, name="train"):
-        df = get_diff_df(df, num_skills, num_questions, total_cnt_init=total_cnt_init, diff_unk=diff_unk)
+    def __init__(self, df, seq_len, num_skills, num_questions, diff_df, balanced=0, name="train"):
         
         self.df = df
         self.seq_len = seq_len
         self.num_skills = num_skills
         self.num_questions = num_questions
-
-        self.questions = [
-            u_df["item_id"].values[-self.seq_len :]
-            for _, u_df in self.df.groupby("user_id")
-        ]
-        self.skills = [
-            u_df["skill_id"].values[-self.seq_len :]
-            for _, u_df in self.df.groupby("user_id")
-        ]
-        self.responses = [
-            u_df["correct"].values[-self.seq_len :]
-            for _, u_df in self.df.groupby("user_id")
-        ]
-        self.lengths = [
-            len(u_df["skill_id"].values) for _, u_df in self.df.groupby("user_id")
-        ]
-        self.skill_diff = [
-            u_df["skill_diff"].values[-self.seq_len :]
-            for _, u_df in self.df.groupby("user_id")
-        ]
-        self.question_diff = [
-            u_df["item_diff"].values[-self.seq_len :]
-            for _, u_df in self.df.groupby("user_id")
-        ]
-
-        s_df = df.loc[:, ['skill_id', 'skill_diff']]
-        s_df = s_df.drop_duplicates(subset=["skill_id"]).sort_values(by='skill_id')
-        q_df = df.loc[:, ['item_id', 'item_diff']]
-        q_df = q_df.drop_duplicates(subset=["item_id"]).sort_values(by='item_id')
         
+        self.questions, self.skills, self.responses, self.skill_diff, self.question_diff = [], [], [], [], []
+        for _, u_df in self.df.groupby("user_id"):
+            if balanced:
+                num0 = list(u_df["correct"].values).count(0)
+                num0_index = [idx for idx, c in enumerate(u_df["correct"].values) if c==0]
+                num1 = list(u_df["correct"].values).count(1)
+                num1_index = [idx for idx, c in enumerate(u_df["correct"].values) if c==1]
+                abs_num = abs(num0 - num1)
+
+                if num0 > num1: #remove 0  
+                    rm_index = np.random.choice(num0_index, min(abs_num, len(num0_index)), replace = False)
+                elif num1 > num0 :#remove 1   
+                    rm_index = np.random.choice(num1_index, min(abs_num, len(num1_index)), replace = False)
+                else: 
+                    rm_index = []
+                self.questions.append(get_balanced(self.seq_len, rm_index, u_df["item_id"].values))
+                self.skills.append(get_balanced(self.seq_len, rm_index, u_df["skill_id"].values))
+                self.responses.append(get_balanced(self.seq_len, rm_index, u_df["correct"].values))
+                self.skill_diff.append(get_balanced(self.seq_len, rm_index, u_df["skill_diff"].values))
+                self.question_diff.append(get_balanced(self.seq_len, rm_index, u_df["item_diff"].values))
+            else:
+                self.questions.append(u_df["item_id"].values[-self.seq_len :])
+                self.skills.append(u_df["skill_id"].values[-self.seq_len :])
+                self.responses.append(u_df["correct"].values[-self.seq_len :])
+                self.skill_diff.append(u_df["skill_diff"].values[-self.seq_len :])
+                self.question_diff.append(u_df["item_diff"].values[-self.seq_len :])
+  
+        s_df = diff_df.loc[:, ['skill_id', 'skill_diff']]
+        s_df = s_df.drop_duplicates(subset=["skill_id"]).sort_values(by='skill_id')
+        q_df = diff_df.loc[:, ['item_id', 'item_diff']]
+        q_df = q_df.drop_duplicates(subset=["item_id"]).sort_values(by='item_id')
+            
+        # if name == "train":
         print(f"mean of {name} set, skill correct ratio:{np.mean(s_df['skill_diff']*100):.2f}")
         print(f"mean of {name} set, question correct ratio:{np.mean(q_df['item_diff']*100):.2f}")
         print(f"mean of {name} set, class 0 ratio:{sum(list(x).count(0) for x in self.responses)/sum(len(x) for x in self.responses):.2f}")

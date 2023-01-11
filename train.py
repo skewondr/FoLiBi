@@ -13,7 +13,7 @@ if torch.cuda.is_available():
 
 
 def model_train(
-    time_now,
+    dir_name,
     fold,
     model,
     accelerator,
@@ -37,7 +37,6 @@ def model_train(
     model_name = config["model_name"]
     data_name = config["data_name"]
     train_config = config["train_config"]
-    log_path = train_config["log_path"]
 
     token_cnts = 0
     label_sums = 0
@@ -100,19 +99,18 @@ def model_train(
         if valid_auc > best_valid_auc:
 
             path = os.path.join(
-                os.path.join("saved_model", model_name, data_name, time_now), "params_*"
+                dir_name, "params_*"
             )
             for _path in glob.glob(path):
                 os.remove(_path)
             best_valid_auc = valid_auc
             best_epoch = i
-            dir_name = os.path.join("saved_model", model_name, data_name, time_now)
-            if not os.path.exists(dir_name):
-                os.makedirs(dir_name)
+            
+
             torch.save(
                 {"epoch": i, "model_state_dict": model.state_dict(),},
                 os.path.join(
-                    os.path.join("saved_model", model_name, data_name, time_now),
+                    dir_name,
                     "params_{}".format(str(best_epoch)),
                 ),
             )
@@ -133,7 +131,7 @@ def model_train(
         
     checkpoint = torch.load(
         os.path.join(
-            os.path.join("saved_model", model_name, data_name, time_now),
+            dir_name,
             "params_{}".format(str(best_epoch)),
         )
     )
