@@ -50,9 +50,12 @@ class RDEMKT(Module):
         self.question_embed = Embedding(
             self.num_skills + 2, self.hidden_size, padding_idx=0
         )
-        self.interaction_embed = Embedding(
-            2 * (self.num_skills + 2), self.hidden_size, padding_idx=0
+        self.response_embed = Embedding(
+            2+1, self.hidden_size, padding_idx=0
         )
+        # self.interaction_embed = Embedding(
+        #     2 * (self.num_skills + 2), self.hidden_size, padding_idx=0
+        # )
         
         if self.de in ["sde", "lsde"]:
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), self.hidden_size)).to(device)

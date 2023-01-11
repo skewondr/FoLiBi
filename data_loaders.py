@@ -302,9 +302,11 @@ def get_diff_df(df, seq_len, num_skills, num_questions, total_cnt_init=1, diff_u
 
     return df
 
-def get_balanced(seq_len, rm_index, objects): 
-    output = [i for idx, i in enumerate(objects) if idx not in rm_index]
+def get_balanced(seq_len, objects, rm_index=None): 
+    if rm_index is not None : output = [i for idx, i in enumerate(objects) if idx not in rm_index]
+    else: output = objects
     return output[-seq_len :]
+
 
 class MostRecentQuestionSkillDataset(Dataset):
     def __init__(self, df, seq_len, num_skills, num_questions, diff_df, balanced=0, name="train"):
@@ -329,17 +331,23 @@ class MostRecentQuestionSkillDataset(Dataset):
                     rm_index = np.random.choice(num1_index, min(abs_num, len(num1_index)), replace = False)
                 else: 
                     rm_index = []
-                self.questions.append(get_balanced(self.seq_len, rm_index, u_df["item_id"].values))
-                self.skills.append(get_balanced(self.seq_len, rm_index, u_df["skill_id"].values))
-                self.responses.append(get_balanced(self.seq_len, rm_index, u_df["correct"].values))
-                self.skill_diff.append(get_balanced(self.seq_len, rm_index, u_df["skill_diff"].values))
-                self.question_diff.append(get_balanced(self.seq_len, rm_index, u_df["item_diff"].values))
+                r1 = get_balanced(self.seq_len, u_df["item_id"].values, rm_index)
+                r2 = get_balanced(self.seq_len, u_df["skill_id"].values, rm_index)
+                r3 = get_balanced(self.seq_len, u_df["correct"].values, rm_index)
+                r4 = get_balanced(self.seq_len, u_df["skill_diff"].values, rm_index)
+                r5 = get_balanced(self.seq_len, u_df["item_diff"].values, rm_index)
             else:
-                self.questions.append(u_df["item_id"].values[-self.seq_len :])
-                self.skills.append(u_df["skill_id"].values[-self.seq_len :])
-                self.responses.append(u_df["correct"].values[-self.seq_len :])
-                self.skill_diff.append(u_df["skill_diff"].values[-self.seq_len :])
-                self.question_diff.append(u_df["item_diff"].values[-self.seq_len :])
+                r1 = get_balanced(self.seq_len, u_df["item_id"].values)
+                r2 = get_balanced(self.seq_len, u_df["skill_id"].values)
+                r3 = get_balanced(self.seq_len, u_df["correct"].values)
+                r4 = get_balanced(self.seq_len, u_df["skill_diff"].values)
+                r5 = get_balanced(self.seq_len, u_df["item_diff"].values)
+            if len(r1) >= 5: 
+                self.questions.append(r1)
+                self.skills.append(r2)
+                self.responses.append(r3)
+                self.skill_diff.append(r4)
+                self.question_diff.append(r5)
   
         s_df = diff_df.loc[:, ['skill_id', 'skill_diff']]
         s_df = s_df.drop_duplicates(subset=["skill_id"]).sort_values(by='skill_id')
@@ -347,6 +355,7 @@ class MostRecentQuestionSkillDataset(Dataset):
         q_df = q_df.drop_duplicates(subset=["item_id"]).sort_values(by='item_id')
             
         # if name == "train":
+        print(f"# of {name} set, {len(self.responses)}")
         print(f"mean of {name} set, skill correct ratio:{np.mean(s_df['skill_diff']*100):.2f}")
         print(f"mean of {name} set, question correct ratio:{np.mean(q_df['item_diff']*100):.2f}")
         print(f"mean of {name} set, class 0 ratio:{sum(list(x).count(0) for x in self.responses)/sum(len(x) for x in self.responses):.2f}")
@@ -405,17 +414,18 @@ class MostRecentQuestionSkillDataset(Dataset):
         )
 
     def __getitem__(self, index):
-        
-        q, s, r = self.questions[index], self.skills[index], self.responses[index]
-        sd = self.sdiff_array[s]
-        qd = self.qdiff_array[q]
-        self.padded_q[index, -len(q) :] = torch.tensor(q, dtype=torch.long)
-        self.padded_s[index, -len(s) :] = torch.tensor(s, dtype=torch.long)
-        self.padded_r[index, -len(r) :] = torch.tensor(r, dtype=torch.long)
-        self.attention_mask[index, -len(s) :] = torch.ones(len(s), dtype=torch.long)
-        self.padded_sd[index, -len(s) :] = torch.tensor(sd, dtype=torch.float)
-        self.padded_qd[index, -len(q) :] = torch.tensor(qd, dtype=torch.float)
-        self.position[index, -len(s) :] = torch.arange(1, len(s)+1, dtype=torch.long)
+        try:
+            q, s, r = self.questions[index], self.skills[index], self.responses[index]
+            sd = self.sdiff_array[s]
+            qd = self.qdiff_array[q]
+            self.padded_q[index, -len(q) :] = torch.tensor(q, dtype=torch.long)
+            self.padded_s[index, -len(s) :] = torch.tensor(s, dtype=torch.long)
+            self.padded_r[index, -len(r) :] = torch.tensor(r, dtype=torch.long)
+            self.attention_mask[index, -len(s) :] = torch.ones(len(s), dtype=torch.long)
+            self.padded_sd[index, -len(s) :] = torch.tensor(sd, dtype=torch.float)
+            self.padded_qd[index, -len(q) :] = torch.tensor(qd, dtype=torch.float)
+            self.position[index, -len(s) :] = torch.arange(1, len(s)+1, dtype=torch.long)
+        except: embed()
 
         return {
             "questions": self.padded_q[index],

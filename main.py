@@ -147,9 +147,8 @@ def main(config):
         test_df = df[df["user_id"].isin(test_users)]
         
         train_dataset = dataset(train_df, seq_len, num_skills, num_questions, diff_df= train_df, name="train")
-        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, diff_df= train_df, name="valid")
-        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, name="test")
-        testb_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, balanced=balanced, name="testb")
+        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, diff_df= train_df, balanced=balanced, name="valid")
+        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, balanced=balanced, name="test")
         
         if sparsity < 1 :
             non0_s = (train_dataset.sdiff_array!=0).nonzero()[0]
