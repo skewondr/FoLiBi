@@ -75,7 +75,8 @@ def main(config):
     diff_order = train_config.diff_order
     sparsity = train_config.sparsity
     balanced = train_config.balanced
-    
+    diff_as_loss_weight = train_config.diff_as_loss_weight
+
     if train_config.sequence_option == "recent":  # the most recent N interactions
         dataset = MostRecentQuestionSkillDataset
     elif train_config.sequence_option == "early":  # the most early N interactions
@@ -105,10 +106,10 @@ def main(config):
             model_config = config.akt_config
             if data_name in ["statics", "assistments15"]:
                 num_questions = 0
-            model = AKT(device, num_skills, num_questions, seq_len, **model_config)
+            model = AKT(device, num_skills, num_questions, seq_len, diff_as_loss_weight, **model_config)
         elif model_name == "cl4kt":
             model_config = config.cl4kt_config
-            model = CL4KT(device, num_skills, num_questions, seq_len, **model_config)
+            model = CL4KT(device, num_skills, num_questions, seq_len, diff_as_loss_weight, **model_config)
             mask_prob = model_config.mask_prob
             crop_prob = model_config.crop_prob
             permute_prob = model_config.permute_prob
@@ -122,7 +123,7 @@ def main(config):
             model = SAINT(device, num_skills, num_questions, seq_len, **model_config)
         elif model_name == "rdemkt":
             model_config = config.rdemkt_config
-            model = RDEMKT(device, num_skills, num_questions, seq_len, **model_config)
+            model = RDEMKT(device, num_skills, num_questions, seq_len, diff_as_loss_weight, **model_config)
             mask_prob = model_config.mask_prob
 
         dir_name = os.path.join("saved_model", model_name, data_name, params_str)
@@ -388,6 +389,8 @@ if __name__ == "__main__":
     
     parser.add_argument("--gpu_num", type=int, required=True, help="gpu number")
     parser.add_argument("--server_num", type=int, required=True, help="server number")
+
+    parser.add_argument("--diff_as_loss_weight", action="store_true", default=False, help="diff_as_loss_weight")
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
@@ -405,6 +408,7 @@ if __name__ == "__main__":
     cfg.train_config.balanced = args.balanced
     cfg.train_config.gpu_num = args.gpu_num
     cfg.train_config.server_num = args.server_num
+    cfg.train_config.diff_as_loss_weight = args.diff_as_loss_weight
     
     cfg.total_cnt_init = args.total_cnt_init
     cfg.diff_unk = args.diff_unk

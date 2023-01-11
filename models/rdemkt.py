@@ -27,7 +27,7 @@ from .rpe import SinusoidalPositionalEmbeddings
 
 
 class RDEMKT(Module):
-    def __init__(self, device, num_skills, num_questions, seq_len, **kwargs):
+    def __init__(self, device, num_skills, num_questions, seq_len, diff_as_loss_weight, **kwargs):
         super(RDEMKT, self).__init__()
         self.num_skills = num_skills
         self.num_questions = num_questions
@@ -46,6 +46,7 @@ class RDEMKT(Module):
         self.i_reg = self.args["inter_lambda"]
         self.de = self.args["de_type"].split('_')[0]
         self.token_num = int(self.args["de_type"].split('_')[1])
+        self.diff_as_loss_weight = diff_as_loss_weight
         
         self.question_embed = Embedding(
             self.num_skills + 2, self.hidden_size, padding_idx=0
@@ -123,6 +124,8 @@ class RDEMKT(Module):
 
         self.cl_loss_fn = nn.CrossEntropyLoss(reduction="mean")
         self.loss_fn = nn.BCELoss(reduction="mean")
+        if self.diff_as_loss_weight:
+            self.loss_fn = nn.BCELoss(reduction="none")
         self.mse_loss = nn.MSELoss(reduction="mean")
 
     def forward(self, batch):
@@ -268,7 +271,12 @@ class RDEMKT(Module):
             cl_loss = 0
         mask = true > -1
 
-        loss = self.loss_fn(pred[mask], true[mask]) + cl_loss
+        loss = self.loss_fn(pred[mask], true[mask])
+        if self.diff_as_loss_weight:
+            weight = F.softmax(1-feed_dict['sdiff'][1][:, 1:].flatten()[mask], dim=0)
+            loss = torch.sum(loss * weight)
+        
+        loss = loss + cl_loss
 
         return loss, len(pred[mask]), true[mask].sum().item()
 

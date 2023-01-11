@@ -26,7 +26,7 @@ from .rpe import SinusoidalPositionalEmbeddings
 from IPython import embed
 
 class CL4KT(Module):
-    def __init__(self, device, num_skills, num_questions, seq_len, **kwargs):
+    def __init__(self, device, num_skills, num_questions, seq_len, diff_as_loss_weight, **kwargs):
         super(CL4KT, self).__init__()
         self.num_skills = num_skills
         self.num_questions = num_questions
@@ -46,6 +46,7 @@ class CL4KT(Module):
         self.choose_cl = self.args["choose_cl"]
         self.de = self.args["de_type"].split('_')[0]
         self.token_num = int(self.args["de_type"].split('_')[1])
+        self.diff_as_loss_weight = diff_as_loss_weight
 
         self.question_embed = Embedding(
             self.num_skills + 2, self.hidden_size, padding_idx=0
@@ -119,6 +120,8 @@ class CL4KT(Module):
 
         self.cl_loss_fn = nn.CrossEntropyLoss(reduction="mean")
         self.loss_fn = nn.BCELoss(reduction="mean")
+        if self.diff_as_loss_weight:
+            self.loss_fn = nn.BCELoss(reduction="none")
 
     def forward(self, batch):
         if self.training:
@@ -345,7 +348,12 @@ class CL4KT(Module):
             cl_loss = 0
         mask = true > -1
 
-        loss = self.loss_fn(pred[mask], true[mask]) + self.reg_cl * cl_loss
+        loss = self.loss_fn(pred[mask], true[mask])
+        if self.diff_as_loss_weight:
+            weight = F.softmax(1-feed_dict['sdiff'][2][:, 1:].flatten()[mask], dim=0)
+            loss = torch.sum(loss * weight)
+
+        loss = loss + self.reg_cl * cl_loss
 
         return loss, len(pred[mask]), true[mask].sum().item()
 

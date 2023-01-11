@@ -18,6 +18,7 @@ class AKT(Module):
         num_skills,
         num_questions,
         seq_len,
+        diff_as_loss_weight,
         embedding_size,
         num_blocks,
         kq_same,
@@ -59,6 +60,7 @@ class AKT(Module):
         self.reg_l = reg_l
         self.dropout = dropout
         self.separate_qr = separate_qr
+        self.diff_as_loss_weight = diff_as_loss_weight
 
         if self.num_questions > 0:
             self.difficult_param = Embedding(
@@ -118,6 +120,8 @@ class AKT(Module):
         )
         self.reset()
         self.loss_fn = nn.BCELoss(reduction="mean")
+        if self.diff_as_loss_weight:
+            self.loss_fn = nn.BCELoss(reduction="none")
 
     def reset(self):
         for p in self.parameters():
@@ -221,7 +225,12 @@ class AKT(Module):
         true = out_dict["true"].flatten()
         c_reg_loss = out_dict["c_reg_loss"]
         mask = true > -1
+
         loss = self.loss_fn(pred[mask], true[mask])
+        if self.diff_as_loss_weight:
+            weight = F.softmax(1-feed_dict['sdiff'][:, 1:].flatten()[mask], dim=0)
+            loss = torch.sum(loss * weight)
+        
         return loss + c_reg_loss, len(pred[mask]), true[mask].sum().item()
 
     def alignment_and_uniformity(self, out_dict):

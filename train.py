@@ -44,7 +44,6 @@ def model_train(
 
             model.train()
             out_dict = model(batch)
-
             if n_gpu > 1:
                 loss, token_cnt, label_sum = model.module.loss(batch, out_dict)
             else:
