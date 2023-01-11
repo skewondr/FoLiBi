@@ -21,10 +21,8 @@ def model_train(
     train_loader,
     valid_loader,
     test_loader,
-    testb_loader,
     config,
     n_gpu,
-    balanced=0,
     early_stop=True,
 ):
     train_losses = []
@@ -168,41 +166,8 @@ def model_train(
             auc, acc, rmse
         )
     )
-    
-    if balanced:
-        total_preds, total_trues = [], []
-        
-        # evaluation on test dataset
-        with torch.no_grad():
-            for batch in testb_loader:
-
-                model.eval()
-
-                out_dict = model(batch)
-
-                pred = out_dict["pred"].flatten()
-                true = out_dict["true"].flatten()
-                mask = true > -1
-                pred = pred[mask]
-                true = true[mask]
-                total_preds.append(pred)
-                total_trues.append(true)
-
-            total_preds = torch.cat(total_preds).squeeze(-1).detach().cpu().numpy()
-            total_trues = torch.cat(total_trues).squeeze(-1).detach().cpu().numpy()
-
-        aucB = roc_auc_score(y_true=total_trues, y_score=total_preds)
-        accB = accuracy_score(y_true=total_trues >= 0.5, y_pred=total_preds >= 0.5)
-        rmseB = np.sqrt(mean_squared_error(y_true=total_trues, y_pred=total_preds))
-
-        print(
-            "Best Model\tTEST_B AUC: {:.5f}\tTEST_B ACC: {:5f}\tTEST_B RMSE: {:5f}".format(
-                aucB, accB, rmseB
-            )
-        )
-        return [auc, acc, rmse], [aucB, accB, rmseB]
-    else:
-        return [auc, acc, rmse], None
+ 
+    return [auc, acc, rmse]
         
 
     # logs_df = logs_df.append(

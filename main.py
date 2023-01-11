@@ -84,7 +84,6 @@ def main(config):
         raise NotImplementedError("sequence option is not valid")
 
     test_aucs, test_accs, test_rmses = [], [], []
-    testb_aucs, testb_accs, testb_rmses = [], [], []
 
     kfold = KFold(n_splits=5, shuffle=True, random_state=seed)
 
@@ -205,15 +204,6 @@ def main(config):
                     batch_size=eval_batch_size,
                 )
             )
-            
-            testb_loader = accelerator.prepare(
-                DataLoader(
-                    SimCLRDatasetWrapper(
-                        testb_dataset, seq_len, 0, 0, 0, 0, 0, eval_mode=True
-                    ),
-                    batch_size=eval_batch_size,
-                )
-            )
 
         elif model_name == "rdemkt":   
             train_loader = accelerator.prepare(
@@ -246,15 +236,7 @@ def main(config):
                     batch_size=eval_batch_size,
                 )
             )
-            
-            testb_loader = accelerator.prepare(
-                DataLoader(
-                    MKMDatasetWrapper(
-                        diff_order, testb_dataset, seq_len, 0, eval_mode=True
-                    ),
-                    batch_size=eval_batch_size,
-                )
-            )
+
         else:
             train_loader = accelerator.prepare(
                 DataLoader(train_dataset, batch_size=batch_size)
@@ -266,10 +248,6 @@ def main(config):
 
             test_loader = accelerator.prepare(
                 DataLoader(test_dataset, batch_size=eval_batch_size)
-            )
-            
-            testb_loader = accelerator.prepare(
-                DataLoader(testb_dataset, batch_size=eval_batch_size)
             )
 
         n_gpu = torch.cuda.device_count()
@@ -285,7 +263,7 @@ def main(config):
 
         model, opt = accelerator.prepare(model, opt)
 
-        t1, t2  = model_train(
+        t1 = model_train(
             dir_name,
             fold,
             model,
@@ -294,19 +272,13 @@ def main(config):
             train_loader,
             valid_loader,
             test_loader,
-            testb_loader,
             config,
             n_gpu,
-            balanced=balanced,
         ) #t1 = [test_auc, test_acc, test_rmse]
 
         test_aucs.append(t1[0])
         test_accs.append(t1[1])
         test_rmses.append(t1[2])
-        if t2 is not None:
-            testb_aucs.append(t2[0])
-            testb_accs.append(t2[1])
-            testb_rmses.append(t2[2])
 
     test_auc = np.mean(test_aucs)
     test_auc_std = np.std(test_aucs)
@@ -319,17 +291,6 @@ def main(config):
     print("AUC\tACC\tRMSE")
     print("{:.5f}\t{:.5f}\t{:.5f}".format(test_auc, test_acc, test_rmse))
     
-    if len(testb_aucs)>0 and len(testb_accs)>0 and len(testb_rmses)>0:
-        testb_auc = np.mean(testb_aucs)
-        testb_auc_std = np.std(testb_aucs)
-        testb_acc = np.mean(testb_accs)
-        testb_acc_std = np.std(testb_accs)
-        testb_rmse = np.mean(testb_rmses)
-        testb_rmse_std = np.std(testb_rmses)
-        
-        print("AUC_B\tACC_B\tRMSE_B")
-        print("{:.5f}\t{:.5f}\t{:.5f}".format(testb_auc, testb_acc, testb_rmse))
-    
     print_args = dict()
     print_args["auc"] = round(test_auc, 4)
     print_args["auc_std"] = round(test_auc_std, 4)
@@ -337,14 +298,6 @@ def main(config):
     print_args["acc_std"] = round(test_acc_std, 4)
     print_args["rmse"] = round(test_rmse, 4)
     print_args["rmse_std"] = round(test_rmse_std, 4)
-    
-    if len(testb_aucs)>0 and len(testb_accs)>0 and len(testb_rmses)>0:
-        print_args["aucB"] = round(testb_auc, 4)
-        print_args["aucB_std"] = round(testb_auc_std, 4)
-        print_args["accB"] = round(testb_acc, 4)
-        print_args["accB_std"] = round(testb_acc_std, 4)
-        print_args["rmseB"] = round(testb_rmse, 4)
-        print_args["rmseB_std"] = round(testb_rmse_std, 4)
     
     if config.use_wandb:
         wandb.log(print_args)
