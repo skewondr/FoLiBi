@@ -314,6 +314,10 @@ def main(config):
     test_rmse = np.mean(test_rmses)
     test_rmse_std = np.std(test_rmses)
     
+    print("\n5-fold CV Result")
+    print("AUC\tACC\tRMSE")
+    print("{:.5f}\t{:.5f}\t{:.5f}".format(test_auc, test_acc, test_rmse))
+    
     if len(testb_aucs)>0 and len(testb_accs)>0 and len(testb_rmses)>0:
         testb_auc = np.mean(testb_aucs)
         testb_auc_std = np.std(testb_aucs)
@@ -321,6 +325,9 @@ def main(config):
         testb_acc_std = np.std(testb_accs)
         testb_rmse = np.mean(testb_rmses)
         testb_rmse_std = np.std(testb_rmses)
+        
+        print("AUC_B\tACC_B\tRMSE_B")
+        print("{:.5f}\t{:.5f}\t{:.5f}".format(testb_auc, testb_acc, testb_rmse))
     
     print_args = model_config.copy()
     print_args["sparsity"] = sparsity
@@ -349,12 +356,6 @@ def main(config):
     print_args["server_num"] = train_config.server_num
     if config.use_wandb:
         wandb.log(print_args)
-
-    print("\n5-fold CV Result")
-    print("AUC\tACC\tRMSE")
-    print("{:.5f}\t{:.5f}\t{:.5f}".format(test_auc, test_acc, test_rmse))
-    print("AUC_B\tACC_B\tRMSE_B")
-    print("{:.5f}\t{:.5f}\t{:.5f}".format(testb_auc, testb_acc, testb_rmse))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -431,7 +432,7 @@ if __name__ == "__main__":
     
     parser.add_argument("--de_type", type=str, default="none_0", help="sde, rde")
     parser.add_argument("--sparsity", type=float, default=1.0, help="sparsity of difficulty in valid/test dataset")
-    parser.add_argument("--balanced", type=int, default=0, help="set balanced testset")
+    parser.add_argument("--balanced", type=int, default=1, help="set balanced testset")
     
     parser.add_argument("--total_cnt_init", type=int, default=0, help="total_cnt_init")
     parser.add_argument("--diff_unk", type=float, default=0.5, help="diff_unk")
