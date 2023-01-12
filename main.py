@@ -85,6 +85,7 @@ def main(config):
         raise NotImplementedError("sequence option is not valid")
 
     test_aucs, test_accs, test_rmses = [], [], []
+    test_aucs_balanced, test_accs_balanced, test_rmses_balanced = [], [], []
 
     kfold = KFold(n_splits=5, shuffle=True, random_state=seed)
 
@@ -274,12 +275,16 @@ def main(config):
             valid_loader,
             test_loader,
             config,
-            n_gpu,
+            n_gpu
         ) #t1 = [test_auc, test_acc, test_rmse]
 
         test_aucs.append(t1[0])
         test_accs.append(t1[1])
         test_rmses.append(t1[2])
+
+        test_aucs_balanced.append(t1[3])
+        test_accs_balanced.append(t1[4])
+        test_rmses_balanced.append(t1[5])
 
     test_auc = np.mean(test_aucs)
     test_auc_std = np.std(test_aucs)
@@ -287,6 +292,10 @@ def main(config):
     test_acc_std = np.std(test_accs)
     test_rmse = np.mean(test_rmses)
     test_rmse_std = np.std(test_rmses)
+
+    test_auc_balanced = np.mean(test_aucs_balanced)
+    test_acc_balanced = np.mean(test_accs_balanced)
+    test_rmse_balanced = np.mean(test_rmses_balanced)
     
     print("\n5-fold CV Result")
     print("AUC\tACC\tRMSE")
@@ -299,6 +308,10 @@ def main(config):
     print_args["acc_std"] = round(test_acc_std, 4)
     print_args["rmse"] = round(test_rmse, 4)
     print_args["rmse_std"] = round(test_rmse_std, 4)
+
+    print_args['auc_balanced'] = round(test_auc_balanced, 4)
+    print_args['acc_balanced'] = round(test_acc_balanced, 4)
+    print_args['rmse_balanced'] = round(test_rmse_balanced, 4)
     
     if config.use_wandb:
         print_args['Model'] = model_name 
@@ -391,6 +404,7 @@ if __name__ == "__main__":
     parser.add_argument("--server_num", type=int, required=True, help="server number")
 
     parser.add_argument("--diff_as_loss_weight", action="store_true", default=False, help="diff_as_loss_weight")
+    parser.add_argument("--valid_balanced", action="store_true", default=False, help="valid_balanced")
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
@@ -409,6 +423,7 @@ if __name__ == "__main__":
     cfg.train_config.gpu_num = args.gpu_num
     cfg.train_config.server_num = args.server_num
     cfg.train_config.diff_as_loss_weight = args.diff_as_loss_weight
+    cfg.train_config.valid_balanced = args.valid_balanced
     
     cfg.total_cnt_init = args.total_cnt_init
     cfg.diff_unk = args.diff_unk
