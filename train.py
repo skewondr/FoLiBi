@@ -102,15 +102,11 @@ def model_train(
                 os.remove(_path)
             best_valid_auc = valid_auc
             best_epoch = i
-            
-
             torch.save(
-                {"epoch": i, "model_state_dict": model.state_dict(),},
-                os.path.join(
-                    dir_name,
-                    "params_{}".format(str(best_epoch)),
-                ),
-            )
+                {"epoch": i, "model_state_dict": model.state_dict()},
+                os.path.join(dir_name, f"{fold}_params_{str(best_epoch)}")
+                )
+        
         if i - best_epoch > 10:
             break
 
@@ -126,12 +122,7 @@ def model_train(
             )
         )
         
-    checkpoint = torch.load(
-        os.path.join(
-            dir_name,
-            "params_{}".format(str(best_epoch)),
-        )
-    )
+    checkpoint = torch.load(os.path.join(dir_name, f"{fold}_params_{str(best_epoch)}"))
 
     model.load_state_dict(checkpoint["model_state_dict"])
 
