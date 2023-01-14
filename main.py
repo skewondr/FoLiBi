@@ -306,8 +306,11 @@ def main(config):
     test_rmse_std = np.std(test_rmses)
 
     test_auc_balanced = np.mean(test_aucs_balanced)
+    test_aucb_std = np.std(test_aucs_balanced)
     test_acc_balanced = np.mean(test_accs_balanced)
+    test_accb_std = np.std(test_accs_balanced)
     test_rmse_balanced = np.mean(test_rmses_balanced)
+    test_rmseb_std = np.std(test_rmses_balanced)
     
     print("\n5-fold CV Result")
     print("AUC\tACC\tRMSE")
@@ -322,8 +325,11 @@ def main(config):
     print_args["rmse_std"] = round(test_rmse_std, 4)
 
     print_args['auc_balanced'] = round(test_auc_balanced, 4)
+    print_args["auc_b_std"] = round(test_aucb_std, 4)
     print_args['acc_balanced'] = round(test_acc_balanced, 4)
+    print_args["acc_b_std"] = round(test_accb_std, 4)
     print_args['rmse_balanced'] = round(test_rmse_balanced, 4)
+    print_args["rmse_b_std"] = round(test_rmseb_std, 4)
     
     if config.use_wandb:
         print_args['Model'] = model_name 
