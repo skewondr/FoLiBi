@@ -30,7 +30,16 @@ import time
 from time import localtime 
 import statistics 
 import json
+import random 
 
+def set_seed(seed: int):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+
+    torch.backends.cudnn.deterministic = True
+    
 def main(config):
 
     tm = localtime(time.time())
@@ -55,6 +64,9 @@ def main(config):
 
     train_config = config.train_config
     checkpoint_dir = config.checkpoint_dir
+    
+    seed = train_config.seed
+    set_seed(seed)
 
     if not os.path.isdir(checkpoint_dir):
         os.mkdir(checkpoint_dir)
@@ -375,7 +387,7 @@ if __name__ == "__main__":
         "--batch_size", type=float, default=512, help="train batch size"
     )
     parser.add_argument(
-        "--only_rp", type=int, default=0, help="train with only rp model"
+        "--only_rp", type=int, default=1, help="train with only rp model"
     )
     parser.add_argument(
         "--choose_cl", type=str, default="both", help="choose between q_cl and s_cl"
@@ -395,7 +407,7 @@ if __name__ == "__main__":
     
     parser.add_argument("--de_type", type=str, default="none_0", help="sde, rde")
     parser.add_argument("--sparsity", type=float, default=1.0, help="sparsity of difficulty in valid/test dataset")
-    parser.add_argument("--balanced", type=int, default=1, help="set balanced testset")
+    parser.add_argument("--balanced", type=int, default=0, help="set balanced testset")
     
     parser.add_argument("--total_cnt_init", type=int, default=0, help="total_cnt_init")
     parser.add_argument("--diff_unk", type=float, default=0.5, help="diff_unk")
@@ -405,6 +417,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--diff_as_loss_weight", action="store_true", default=False, help="diff_as_loss_weight")
     parser.add_argument("--valid_balanced", action="store_true", default=False, help="valid_balanced")
+    parser.add_argument("--seed",  type=int, default=12405, help="seed")
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
@@ -424,6 +437,7 @@ if __name__ == "__main__":
     cfg.train_config.server_num = args.server_num
     cfg.train_config.diff_as_loss_weight = args.diff_as_loss_weight
     cfg.train_config.valid_balanced = args.valid_balanced
+    cfg.train_config.seed = args.seed
     
     cfg.total_cnt_init = args.total_cnt_init
     cfg.diff_unk = args.diff_unk
