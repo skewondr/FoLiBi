@@ -31,7 +31,6 @@ def model_train(
 
     logs_df = pd.DataFrame()
     num_epochs = config["train_config"]["num_epochs"]
-    # num_epochs = 1
     model_name = config["model_name"]
     data_name = config["data_name"]
     train_config = config["train_config"]
@@ -133,7 +132,7 @@ def model_train(
         if early_stop_valid > best_valid_auc:
 
             path = os.path.join(
-                dir_name, "params_*"
+                dir_name, f"{fold}_params_*"
             )
             for _path in glob.glob(path):
                 os.remove(_path)
@@ -155,7 +154,7 @@ def model_train(
 
         print(f"Fold {fold}:\t Epoch {i}\tTRAIN LOSS: {train_loss:.4f}\tVALID AUC: {valid_auc:.4f}\tVALID AUC(Balanced): {valid_auc_balanced:.4f}")
         
-    checkpoint = torch.load(os.path.join(dir_name, f"{fold}_params.pt"))
+    checkpoint = torch.load(os.path.join(dir_name, f"{fold}_params_best.pt"))
 
     model.load_state_dict(checkpoint["model_state_dict"])
 
