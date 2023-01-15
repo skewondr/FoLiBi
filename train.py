@@ -141,7 +141,7 @@ def model_train(
             best_epoch = i
             torch.save(
                 {"epoch": i, "model_state_dict": model.state_dict()},
-                os.path.join(dir_name, f"{fold}_params_{str(best_epoch)}")
+                os.path.join(dir_name, f"{fold}_params_best.pt")
                 )
         
         if i - best_epoch > 10:
@@ -155,7 +155,7 @@ def model_train(
 
         print(f"Fold {fold}:\t Epoch {i}\tTRAIN LOSS: {train_loss:.4f}\tVALID AUC: {valid_auc:.4f}\tVALID AUC(Balanced): {valid_auc_balanced:.4f}")
         
-    checkpoint = torch.load(os.path.join(dir_name, f"{fold}_params_{str(best_epoch)}"))
+    checkpoint = torch.load(os.path.join(dir_name, f"{fold}_params.pt"))
 
     model.load_state_dict(checkpoint["model_state_dict"])
 
