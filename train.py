@@ -91,13 +91,14 @@ def model_train(
                 for u in range(differences.shape[0]):
                     difference_user = differences[u]
                     n_samples_user = n_samples[u]
-                    true = out_dict["true"][u][-n_samples_user:]
+                    start_idx = len(out_dict['true'][u]) - n_samples_user
+                    true = out_dict["true"][u][start_idx:]
                     if difference_user > 0: ## Correct samples are more than incorrect samples, random under sampling on correct samples
                         indices = torch.nonzero(true).flatten()
                     elif difference_user < 0: ## Incorrect samples are more than correct samples, random under sampling on incorrect samples
                         indices = torch.nonzero(1 - true).flatten()
 
-                    additional_mask_indices = torch.randint(len(indices), size=(1, torch.abs(difference_user).item())).flatten()
+                    additional_mask_indices = start_idx + indices[np.random.choice(len(indices), size=torch.abs(difference_user).item(), replace=False)]
                     padding_mask[u][additional_mask_indices] = False
 
                 pred = out_dict["pred"].flatten()
@@ -187,13 +188,15 @@ def model_train(
             for u in range(differences.shape[0]):
                 difference_user = differences[u]
                 n_samples_user = n_samples[u]
-                true = out_dict["true"][u][-n_samples_user:]
+                start_idx = len(out_dict['true'][u]) - n_samples_user
+                true = out_dict["true"][u][start_idx:]
+
                 if difference_user > 0: ## Correct samples are more than incorrect samples, random under sampling on correct samples
                     indices = torch.nonzero(true).flatten()
                 elif difference_user < 0: ## Incorrect samples are more than correct samples, random under sampling on incorrect samples
                     indices = torch.nonzero(1 - true).flatten()
 
-                additional_mask_indices = torch.randint(len(indices), size=(1, torch.abs(difference_user).item())).flatten()
+                additional_mask_indices = start_idx + indices[np.random.choice(len(indices), size=torch.abs(difference_user).item(), replace=False)]
                 padding_mask[u][additional_mask_indices] = False
 
             pred = out_dict["pred"].flatten()
