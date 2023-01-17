@@ -7,6 +7,7 @@ if torch.cuda.is_available():
     torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
 from IPython import embed
+from .rpe import SinusoidalPositionalEmbeddings 
 
 class SAKT(Module):
     def __init__(
@@ -18,6 +19,7 @@ class SAKT(Module):
         embedding_size, 
         num_attn_heads, 
         dropout, 
+        de_type="none",
         num_blocks=2, 
         emb_path="", 
         pretrain_dim=768
@@ -40,17 +42,31 @@ class SAKT(Module):
         # self.P = Parameter(torch.Tensor(self.seq_len, self.embedding_size))
         self.position_emb = Embedding(seq_len + 1, embedding_size, padding_idx=0)
 
-        self.blocks = get_clones(Blocks(device, embedding_size, num_attn_heads, dropout), self.num_blocks)
+        self.de = de_type.split('_')[0]
+        self.token_num = int(de_type.split('_')[1])
+        
+        if self.de.startswith("sde"):
+            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
+            self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
+            
+        self.blocks = get_clones(Blocks(device, embedding_size, num_attn_heads, dropout, self.de), self.num_blocks)
 
         self.dropout_layer = Dropout(dropout)
         self.pred = Linear(self.embedding_size, 1)
-
-    def base_emb(self, q, r, qry, pos):
+        
+    def base_emb(self, q, r, qry, pos, diff):
         masked_responses = r * (r > -1).long()
         x = q + self.num_skills * masked_responses
         qshftemb, xemb = self.exercise_emb(qry), self.interaction_emb(x)
         posemb = self.position_emb(pos)
-        xemb = xemb + posemb
+        if not self.de.startswith("alibi"):
+            xemb = xemb + posemb
+        if self.de.startswith("sde"):
+            diffx = (self.token_num+1) + diff * (r > -1).long()
+            diffo = diff * (r > -1).int()
+            diffox = torch.where(r == 0 ,diffo, diffx)
+            demb = self.diff_emb(diffox).float()
+            xemb += demb
         return qshftemb, xemb
 
     def forward(self, feed_dict):
@@ -58,9 +74,16 @@ class SAKT(Module):
         r = feed_dict["responses"][:, :-1]
         qry = feed_dict["skills"][:, 1:]
         pos = feed_dict["position"][:, :-1]
-        qshftemb, xemb = self.base_emb(q, r, qry, pos)
+        diff = feed_dict["sdiff"][:, :-1]
+
+        if self.de.startswith("sde"):
+            boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
+            diff = torch.bucketize(diff, boundaries)
+            diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int()) 
+            
+        qshftemb, xemb = self.base_emb(q, r, qry, pos, diff)
         for i in range(self.num_blocks):
-            xemb = self.blocks[i](qshftemb, xemb, xemb)
+            xemb = self.blocks[i](qshftemb, xemb, xemb, diff)
 
         p = torch.sigmoid(self.pred(self.dropout_layer(xemb))).squeeze(-1)
         out_dict = {
@@ -77,20 +100,24 @@ class SAKT(Module):
         return loss , len(pred[mask]), true[mask].sum().item()
 
 class Blocks(Module):
-    def __init__(self, device, embedding_size, num_attn_heads, dropout) -> None:
+    def __init__(self, device, embedding_size, num_attn_heads, dropout, de="none") -> None:
         super().__init__()
         self.device = device
-        self.attn = MultiheadAttention(embedding_size, num_attn_heads, dropout=dropout)
+        self.de = de
+        if self.de.startswith("alibi"):
+            self.attn = MultiheadAttention(embedding_size, num_attn_heads, de_type=de, dropout=dropout)
+        else:
+            self.attn = MultiheadAttention(embedding_size, num_attn_heads, dropout=dropout)
         self.attn_dropout = Dropout(dropout)
         self.attn_layer_norm = LayerNorm(embedding_size)
 
         self.FFN = transformer_FFN(embedding_size, dropout)
         self.FFN_dropout = Dropout(dropout)
         self.FFN_layer_norm = LayerNorm(embedding_size)
-
-    def forward(self, q=None, k=None, v=None):
-        causal_mask = ut_mask(self.device, seq_len = k.shape[1])
-        attn_emb, _ = self.attn(q, k, v, mask=~causal_mask)
+        
+    def forward(self, q=None, k=None, v=None, diff=None):
+        causal_mask = ~ut_mask(self.device, seq_len = k.shape[1])
+        attn_emb, _ = self.attn(q, k, v, diff=diff, mask=causal_mask)
         attn_emb = self.attn_dropout(attn_emb)
         attn_emb = self.attn_layer_norm(q + attn_emb)
 

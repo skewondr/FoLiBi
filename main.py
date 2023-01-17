@@ -405,7 +405,7 @@ if __name__ == "__main__":
     parser.add_argument("--valid_balanced", action="store_true", default=False, help="valid_balanced")
     parser.add_argument("--seed",  type=int, default=12405, help="seed")
     
-    parser.add_argument("--de_type", type=str, default="alibi", help="difficulty encoding")
+    parser.add_argument("--de_type", type=str, default="none", help="difficulty encoding")
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")

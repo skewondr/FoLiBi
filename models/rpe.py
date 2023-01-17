@@ -160,3 +160,50 @@ class RotaryPositionalEmbeddings(nn.Module):
         t = (t * diff_freqs.cos()) + (self.rotate_half(t) * diff_freqs.sin())
         return torch.cat((t_left, t, t_right), dim = -1)
 
+class ALiBiPositionalEmbeddings(nn.Module):
+    def __init__(self, attn_heads, max_len=100, bs=512):
+        """
+        * `d` is the number of features $d$
+        * `base` is the constant used for calculating $\Theta$
+        """
+        super().__init__()
+        self.max_len = max_len
+        self.attn_heads = attn_heads
+        self.slopes = torch.Tensor(self.get_slopes(attn_heads))
+        self.alibi = self.slopes.unsqueeze(1).unsqueeze(1) * torch.arange(max_len).unsqueeze(0).unsqueeze(0).expand(attn_heads, -1, -1) #attn_heads, 1, max_len 
+        self.alibi = self.alibi.view(attn_heads, 1, max_len)
+        self.alibi = self.alibi.repeat(bs, 1, 1)  # batch_size*attn_heads, 1, max_len
+        self._future_mask = torch.empty(0)
+        
+    def get_slopes(self, n):
+        """return list of lengnth n"""
+        def get_slopes_power_of_2(n):
+            start = (2**(-2**-(math.log2(n)-3)))
+            ratio = start
+            return [start*ratio**i for i in range(n)]
+        if math.log2(n).is_integer():
+            return get_slopes_power_of_2(n)                   #In the paper, we only train models that have 2^a heads for some a. This function has
+        else:                                                 #some good properties that only occur when the input is a power of 2. To maintain that even
+            closest_power_of_2 = 2**math.floor(math.log2(n))  #when the number of heads is not a power of 2, we use this workaround. 
+            return get_slopes_power_of_2(closest_power_of_2) + self.get_slopes(2*closest_power_of_2)[0::2][:n-closest_power_of_2]
+        
+        
+    def buffered_future_mask(self, tensor):
+        dim = tensor.size(2)
+        # self._future_mask.device != tensor.device is not working in TorchScript. This is a workaround.
+        if (
+            self._future_mask.size(0) == 0
+            or (not self._future_mask.device == tensor.device)
+            or self._future_mask.size(1) < self.max_len
+        ):
+            self._future_mask = torch.triu(
+                self.fill_with_neg_inf(torch.zeros([self.max_len, self.max_len])), 1
+            )
+            self._future_mask = self._future_mask.unsqueeze(0) + self.alibi #batch_size*attn_heads, max_len, max_len 
+        self._future_mask = self._future_mask.to(tensor)
+        return self._future_mask[:tensor.shape[0]*self.attn_heads, :dim, :dim]
+
+
+    def fill_with_neg_inf(self, t):
+        """FP16-compatible function that fills a tensor with -inf."""
+        return t.float().fill_(float("-inf")).type_as(t)

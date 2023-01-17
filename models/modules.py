@@ -17,7 +17,7 @@ from torch.nn.init import constant_
 import torch.nn.functional as F
 import numpy as np
 from enum import IntEnum
-from .rpe import RotaryPositionalEmbeddings
+from .rpe import RotaryPositionalEmbeddings, ALiBiPositionalEmbeddings
 from IPython import embed 
 import math 
 
@@ -26,7 +26,7 @@ import copy
 import pandas as pd
 
 class CL4KTTransformerLayer(Module):
-    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, rotary="none"):
+    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none"):
         super(CL4KTTransformerLayer, self).__init__()
         """
             This is a Basic Block of Transformer paper.
@@ -36,7 +36,7 @@ class CL4KTTransformerLayer(Module):
         kq_same = kq_same == 1
         # Multi-Head Attention Block
         self.masked_attn_head = MultiHeadAttentionWithIndividualFeatures(
-            d_model, d_feature, n_heads, dropout, kq_same=kq_same, rotary=rotary
+            d_model, d_feature, n_heads, dropout, kq_same=kq_same, de_type=de_type
         )
 
         # Two layer norm and two dropout layers
@@ -124,7 +124,7 @@ class CL4KTTransformerLayer(Module):
 
 
 class AKTTransformerLayer(Module):
-    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, rotary="none"):
+    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none"):
         super(AKTTransformerLayer, self).__init__()
         """
             This is a Basic Block of Transformer paper.
@@ -134,7 +134,7 @@ class AKTTransformerLayer(Module):
         kq_same = kq_same == 1
         # Multi-Head Attention Block
         self.masked_attn_head = MultiHeadAttentionWithContextDistance(
-            d_model, d_feature, n_heads, dropout, kq_same=kq_same, rotary=rotary
+            d_model, d_feature, n_heads, dropout, kq_same=kq_same, de_type=de_type
         )
 
         # Two layer norm and two dropout layers
@@ -221,7 +221,7 @@ class AKTTransformerLayer(Module):
 
 
 class MultiHeadAttentionWithIndividualFeatures(Module):
-    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, rotary="none", bias=True):
+    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none", bias=True):
         super(MultiHeadAttentionWithIndividualFeatures, self).__init__()
         """
         It has projection layer for getting keys, queries, and values. Followed by attention and a connected layer.
@@ -241,8 +241,8 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
         self.out_proj = Linear(d_model, d_model, bias=bias)
         self.gammas = Parameter(torch.zeros(n_heads, 1, 1))
         
-        self.rotary = rotary
-        if self.rotary in "qkv":
+        self.de_type = de_type
+        if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
 
         xavier_uniform_(self.gammas)
@@ -278,10 +278,10 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
         q = q.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        if self.rotary in "qkv" and diff is not None:
+        if self.de_type in "qkv" and diff is not None:
             k = self.rpe(k, diff) # [batch_size, head, len_k,  head_dim]
             q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
-            if "v" in self.rotary :
+            if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
 
         # calculate attention using function we will define next
@@ -301,7 +301,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
 
 
 class MultiHeadAttentionWithContextDistance(Module):
-    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, rotary="none", bias=True):
+    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none", bias=True):
         super(MultiHeadAttentionWithContextDistance, self).__init__()
         """
         It has projection layer for getting keys, queries, and values. Followed by attention and a connected layer.
@@ -322,8 +322,8 @@ class MultiHeadAttentionWithContextDistance(Module):
         self.out_proj = Linear(d_model, d_model, bias=bias)
         self.gammas = Parameter(torch.zeros(n_heads, 1, 1))
 
-        self.rotary = rotary
-        if self.rotary in "qkv":
+        self.de_type = de_type
+        if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
 
         xavier_uniform_(self.gammas)
@@ -359,10 +359,10 @@ class MultiHeadAttentionWithContextDistance(Module):
         q = q.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        if self.rotary in "qkv" and diff is not None:
+        if self.de_type in "qkv" and diff is not None:
             k = self.rpe(k, diff) # [batch_size, head, len_k,  head_dim]
             q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
-            if "v" in self.rotary :
+            if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
 
         # calculate attention using function we will define next
@@ -594,13 +594,14 @@ def get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
-def attention(query, key, value, mask=None, dropout=None):
+def attention(query, key, value, score_mask=None, mask=None, dropout=None):
     "Compute 'Scaled Dot Product Attention'"
     d_k = query.size(-1)
     scores = torch.matmul(query, key.transpose(-2, -1)) \
              / math.sqrt(d_k)
+    if score_mask is not None:
+        scores += score_mask.view(scores.shape)
     if mask is not None:
-        
         scores = scores.masked_fill(mask == 0, -1e9)
     p_attn = F.softmax(scores, dim=-1)
     if dropout is not None:
@@ -612,7 +613,7 @@ def clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, d_model, h, dropout=0.1, rotary="none"):
+    def __init__(self, d_model, h, dropout=0.1, de_type="none"):
         "Take in model size and number of heads."
         super(MultiheadAttention, self).__init__()
         assert d_model % h == 0
@@ -622,9 +623,11 @@ class MultiheadAttention(nn.Module):
         self.linears = clones(nn.Linear(d_model, d_model, bias=False), 4) # Q, K, V, last
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
-        self.rotary = rotary
-        if self.rotary in "qkv":
+        self.de_type = de_type
+        if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(self.d_k)
+        if self.de_type.startswith("alibi"):
+            self.score = ALiBiPositionalEmbeddings(h)
 
     def forward(self, query, key, value, diff=None, mask=None):
         "Implements Figure 2"
@@ -638,18 +641,21 @@ class MultiheadAttention(nn.Module):
             [l(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
              for l, x in zip(self.linears, (query, key, value))]
             
-        if self.rotary in "qkv" and diff is not None:
-            if "q" in self.rotary :
+        if self.de_type in "qkv" and diff is not None:
+            if "q" in self.de_type :
                 query = self.rpe(query, diff) # [batch_size, head, len_q,  head_dim]
-            if "k" in self.rotary :
+            if "k" in self.de_type :
                 key = self.rpe(key, diff) # [batch_size, head, len_k,  head_dim]
-            if "v" in self.rotary :
+            if "v" in self.de_type :
                 value = self.rpe(value, diff) # [batch_size, head, len_q,  head_dim]
-
-        # 2) Apply attention on all the projected vectors in batch.
-        x, self.attn = attention(query, key, value, mask=mask,
-                                 dropout=self.dropout)
-
+        if self.de_type.startswith("alibi") and diff is not None:
+            # 2) Apply attention on all the projected vectors in batch.
+            x, self.attn = attention(query, key, value, score_mask=self.score.buffered_future_mask(query),
+                                     mask=mask, dropout=self.dropout)
+        else:
+            # 2) Apply attention on all the projected vectors in batch.
+            x, self.attn = attention(query, key, value, mask=mask,
+                                    dropout=self.dropout)
         # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous() \
             .view(nbatches, -1, self.h * self.d_k)
