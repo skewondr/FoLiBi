@@ -23,11 +23,10 @@ from IPython import embed
 
 if torch.cuda.is_available():
     torch.set_default_tensor_type(torch.cuda.FloatTensor)
-from .rpe import SinusoidalPositionalEmbeddings
 
 
 class RDEMKT(Module):
-    def __init__(self, device, num_skills, num_questions, seq_len, diff_as_loss_weight, **kwargs):
+    def __init__(self, device, num_skills, num_questions, seq_len, **kwargs):
         super(RDEMKT, self).__init__()
         self.num_skills = num_skills
         self.num_questions = num_questions
@@ -44,28 +43,14 @@ class RDEMKT(Module):
         self.choose_cl = self.args["choose_cl"]
         self.q_reg = self.args["ques_lambda"]
         self.i_reg = self.args["inter_lambda"]
-        self.de = self.args["de_type"].split('_')[0]
-        self.token_num = int(self.args["de_type"].split('_')[1])
-        self.diff_as_loss_weight = diff_as_loss_weight
         
         self.question_embed = Embedding(
             self.num_skills + 2, self.hidden_size, padding_idx=0
         )
-        self.response_embed = Embedding(
-            2, self.hidden_size,
+        self.answer_embed = Embedding(
+            2 + 1, self.hidden_size, padding_idx=2
         )
-        # self.interaction_embed = Embedding(
-        #     2 * (self.num_skills + 2), self.hidden_size, padding_idx=0
-        # )
-        
-        if self.de in ["sde", "lsde"]:
-            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), self.hidden_size)).to(device)
-            self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
-            rotary = "none"
-        elif self.de in ["rde", "lrde"]:
-            rotary = "qkv"
-        else: 
-            rotary = "none"
+        self.sim = Similarity(temp=self.args["temp"])
 
         self.question_encoder = ModuleList(
             [
@@ -76,6 +61,7 @@ class RDEMKT(Module):
                     n_heads=self.num_attn_heads,
                     dropout=self.dropout,
                     kq_same=self.kq_same,
+                    rotary="qk",
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -90,7 +76,7 @@ class RDEMKT(Module):
                     n_heads=self.num_attn_heads,
                     dropout=self.dropout,
                     kq_same=self.kq_same,
-                    rotary=rotary,
+                    rotary="qkv",
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -124,8 +110,6 @@ class RDEMKT(Module):
 
         self.cl_loss_fn = nn.CrossEntropyLoss(reduction="mean")
         self.loss_fn = nn.BCELoss(reduction="mean")
-        if self.diff_as_loss_weight:
-            self.loss_fn = nn.BCELoss(reduction="none")
         self.mse_loss = nn.MSELoss(reduction="mean")
 
     def forward(self, batch):
@@ -133,22 +117,11 @@ class RDEMKT(Module):
             q_i, q = batch["skills"]  # augmented q_i, augmented q_j and original q
             r_i, r = batch["responses"]  # augmented r_i, augmented r_j and original r
             diff_i, diff = batch["sdiff"]
-            
-            if self.token_num < 1000:
-                boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
-                diff = torch.bucketize(diff, boundaries)
-                diff_i = torch.bucketize(diff_i, boundaries)
-                s_diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
-                si_diff_ox = torch.where(r_i == 0 , (diff_i -(self.token_num+1)) * (r_i > -1).int(), diff_i * (r_i > -1).int())
-            else:
-                diff = diff * 100
-                diff_i = diff_i * 100
-                s_diff_ox = torch.where(r==0 , (diff-(100+1)) * (r > -1).int(), diff * (r > -1).int())
-                si_diff_ox = torch.where(r_i == 0 , (diff_i -(100+1)) * (r_i > -1).int(), diff_i * (r_i > -1).int())
-                
+            attention_mask_i, attention_mask, attention_mask_n = batch["attention_mask"]
+
             if not self.only_rp:
                 ques_i_embed = self.question_embed(q_i) #original
-                inter_i_embed, i_demb = self.get_interaction_embed(q, r_i, diff_i) #masked
+                inter_i_embed = self.get_interaction_embed(q, r_i) #masked
 
                 # BERT
                 if self.choose_cl in ["q_cl", "both"]:
@@ -158,12 +131,12 @@ class RDEMKT(Module):
                             query=ques_i_embed,
                             key=ques_i_embed,
                             values=ques_i_embed,
+                            diff = None,
                             apply_pos=False,
                         )
                 if self.choose_cl in ["s_cl", "both"]:
-                    for i, block in enumerate(self.interaction_encoder):
-                        if i>0 and self.de == "lsde": inter_i_score += i_demb 
-                        if i>0 and self.de == "rde": si_diff_ox = None
+                    si_diff_ox = torch.where(r == 1 , (diff - 1) * (r > -1).int(), diff * (r > -1).int())
+                    for block in self.interaction_encoder:
                         inter_i_score, _ = block(
                             mask=2,
                             query=inter_i_embed,
@@ -198,30 +171,37 @@ class RDEMKT(Module):
             r = batch["responses"]  # augmented r_i, augmented r_j and original r
             diff = batch["sdiff"]
 
-            if self.token_num < 1000:
-                boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
-                diff = torch.bucketize(diff, boundaries)
-                s_diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
-            else:
-                diff = diff * 100
-                s_diff_ox = torch.where(r==0 , (diff-(100+1)) * (r > -1).int(), diff * (r > -1).int())
-                
+            attention_mask = batch["attention_mask"]
             question_mkm_loss, interaction_mkm_loss = 0, 0
 
+        # if self.choose_cl == "none":
+        #     q_rotary = None
+        #     s_rotary = None
+        # elif self.choose_cl == "q_rp":
+        #     q_rotary = diff * (r > -1).int()
+        #     s_rotary = None
+        # elif self.choose_cl == "s_rp":
+        diff_o = (diff - 1) * (r > -1).int()
+        diff_x = diff * (r > -1).int()
+        s_rotary = torch.where(r == 1 , diff_o, diff_x)
+        # else:
+        #     diff_o = (diff - 1) * (r > -1).int()
+        #     diff_x = diff * (r > -1).int()
+        #     q_rotary = diff * (r > -1).int()
+        #     s_rotary = torch.where(r == 1 , diff_o, diff_x)
+
         q_embed = self.question_embed(q)
-        i_embed, demb = self.get_interaction_embed(q, r, diff)
+        i_embed = self.get_interaction_embed(q, r)
 
         x, y = q_embed, i_embed
         for block in self.question_encoder:
-            x, _ = block(mask=1, query=x, key=x, values=x, apply_pos=True)
+            x, _ = block(mask=1, query=x, key=x, values=x, diff=None, apply_pos=True)
 
-        for i, block in enumerate(self.interaction_encoder):
-            if i>0 and self.de == "lsde": y += demb 
-            if i>0 and self.de == "rde": s_diff_ox = None
-            y, _ = block(mask=1, query=y, key=y, values=y, diff=s_diff_ox, apply_pos=True)
+        for block in self.interaction_encoder:
+            y, _ = block(mask=1, query=y, key=y, values=y, diff=s_rotary, apply_pos=True)
 
         for block in self.knoweldge_retriever:
-            x, attn = block(mask=0, query=x, key=x, values=y, apply_pos=True)
+            x, attn = block(mask=0, query=x, key=x, values=y, diff=None, apply_pos=True)
 
         retrieved_knowledge = torch.cat([x, q_embed], dim=-1)
 
@@ -271,28 +251,14 @@ class RDEMKT(Module):
             cl_loss = 0
         mask = true > -1
 
-        loss = self.loss_fn(pred[mask], true[mask])
-        if self.diff_as_loss_weight:
-            weight = F.softmax(1-feed_dict['sdiff'][1][:, 1:].flatten()[mask], dim=0)
-            loss = torch.sum(loss * weight)
-        
-        loss = loss + cl_loss
+        loss = self.loss_fn(pred[mask], true[mask]) + cl_loss
 
         return loss, len(pred[mask]), true[mask].sum().item()
 
-    def get_interaction_embed(self, skills, responses, diff=None):
-        masked_responses = responses * (responses > -1).long()
-        # interactions = skills + self.num_skills * masked_responses
-        output = self.question_embed(skills) + self.response_embed(masked_responses)
-        if self.de in ["sde", "lsde"]:
-            diffx = (self.token_num+1) + diff * (responses > -1).long()
-            diffo = diff * (responses > -1).int()
-            diffox = torch.where(responses == 0 ,diffo, diffx)
-            demb = self.diff_emb(diffox).float()
-            output += demb
-            return output, demb
-        else:
-            return output, None
+    def get_interaction_embed(self, skills, responses):
+        masked_responses = torch.where(responses == -1, 2, responses)
+        interactions = self.question_embed(skills) + self.answer_embed(masked_responses)
+        return interactions
 
 def gelu(x):
     """Implementation of the gelu activation function.

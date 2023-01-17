@@ -309,7 +309,7 @@ def get_balanced(seq_len, objects, rm_index=None):
 
 
 class MostRecentQuestionSkillDataset(Dataset):
-    def __init__(self, df, seq_len, num_skills, num_questions, diff_df, balanced=0, name="train"):
+    def __init__(self, df, seq_len, num_skills, num_questions, diff_df, name="train"):
         
         self.df = df
         self.seq_len = seq_len
@@ -318,30 +318,11 @@ class MostRecentQuestionSkillDataset(Dataset):
         
         self.questions, self.skills, self.responses, self.skill_diff, self.question_diff = [], [], [], [], []
         for _, u_df in self.df.groupby("user_id"):
-            if balanced:
-                num0 = list(u_df["correct"].values).count(0)
-                num0_index = [idx for idx, c in enumerate(u_df["correct"].values) if c==0]
-                num1 = list(u_df["correct"].values).count(1)
-                num1_index = [idx for idx, c in enumerate(u_df["correct"].values) if c==1]
-                abs_num = abs(num0 - num1)
-
-                if num0 > num1: #remove 0  
-                    rm_index = np.random.choice(num0_index, min(abs_num, len(num0_index)), replace = False)
-                elif num1 > num0 :#remove 1   
-                    rm_index = np.random.choice(num1_index, min(abs_num, len(num1_index)), replace = False)
-                else: 
-                    rm_index = []
-                r1 = get_balanced(self.seq_len, u_df["item_id"].values, rm_index)
-                r2 = get_balanced(self.seq_len, u_df["skill_id"].values, rm_index)
-                r3 = get_balanced(self.seq_len, u_df["correct"].values, rm_index)
-                r4 = get_balanced(self.seq_len, u_df["skill_diff"].values, rm_index)
-                r5 = get_balanced(self.seq_len, u_df["item_diff"].values, rm_index)
-            else:
-                r1 = get_balanced(self.seq_len, u_df["item_id"].values)
-                r2 = get_balanced(self.seq_len, u_df["skill_id"].values)
-                r3 = get_balanced(self.seq_len, u_df["correct"].values)
-                r4 = get_balanced(self.seq_len, u_df["skill_diff"].values)
-                r5 = get_balanced(self.seq_len, u_df["item_diff"].values)
+            r1 = get_balanced(self.seq_len, u_df["item_id"].values)
+            r2 = get_balanced(self.seq_len, u_df["skill_id"].values)
+            r3 = get_balanced(self.seq_len, u_df["correct"].values)
+            r4 = get_balanced(self.seq_len, u_df["skill_diff"].values)
+            r5 = get_balanced(self.seq_len, u_df["item_diff"].values)
             if len(r1) >= 5: 
                 self.questions.append(r1)
                 self.skills.append(r2)

@@ -85,8 +85,6 @@ def main(config):
     optimizer = train_config.optimizer
     seq_len = train_config.seq_len
     diff_order = train_config.diff_order
-    sparsity = train_config.sparsity
-    balanced = train_config.balanced
     diff_as_loss_weight = train_config.diff_as_loss_weight
 
     if train_config.sequence_option == "recent":  # the most recent N interactions
@@ -114,15 +112,15 @@ def main(config):
     print("MODEL", model_name)
     print(dataset)
     for fold, (train_ids, test_ids) in enumerate(kfold.split(users)):
-        # if fold > 1 : break
+        # if fold >= 1 : break
         if model_name == "akt":
             model_config = config.akt_config
             if data_name in ["statics", "assistments15"]:
                 num_questions = 0
-            model = AKT(device, num_skills, num_questions, seq_len, diff_as_loss_weight, **model_config)
+            model = AKT(device, num_skills, num_questions, seq_len, **model_config)
         elif model_name == "cl4kt":
             model_config = config.cl4kt_config
-            model = CL4KT(device, num_skills, num_questions, seq_len, diff_as_loss_weight, **model_config)
+            model = CL4KT(device, num_skills, num_questions, seq_len, **model_config)
             mask_prob = model_config.mask_prob
             crop_prob = model_config.crop_prob
             permute_prob = model_config.permute_prob
@@ -136,7 +134,7 @@ def main(config):
             model = SAINT(device, num_skills, num_questions, seq_len, **model_config)
         elif model_name == "rdemkt":
             model_config = config.rdemkt_config
-            model = RDEMKT(device, num_skills, num_questions, seq_len, diff_as_loss_weight, **model_config)
+            model = RDEMKT(device, num_skills, num_questions, seq_len, **model_config)
             mask_prob = model_config.mask_prob
 
         dir_name = os.path.join("saved_model", model_name, data_name, params_str)
@@ -160,22 +158,8 @@ def main(config):
         test_df = df[df["user_id"].isin(test_users)]
         
         train_dataset = dataset(train_df, seq_len, num_skills, num_questions, diff_df= train_df, name="train")
-        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, diff_df= train_df, balanced=balanced, name="valid")
-        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, balanced=balanced, name="test")
-        
-        if sparsity < 1 :
-            non0_s = (train_dataset.sdiff_array!=0).nonzero()[0]
-            non0_q = (train_dataset.qdiff_array!=0).nonzero()[0]
-            rm_sidx = np.random.choice(non0_s, int(len(non0_s)*sparsity), replace=False)
-            rm_qidx = np.random.choice(non0_q, int(len(non0_q)*sparsity), replace=False)
-            
-            valid_dataset.sdiff_array[rm_sidx] = 0 
-            valid_dataset.qdiff_array[rm_qidx] = 0 
-            test_dataset.sdiff_array[rm_sidx] = 0 
-            test_dataset.qdiff_array[rm_qidx] = 0 
-            print(f"s sparsity(test/valid):{len(non0_s)/len(test_dataset.sdiff_array):.2f}-->{len( (test_dataset.sdiff_array!=0).nonzero()[0])/len(test_dataset.sdiff_array):.2f}")
-            print(f"q sparsity(test/valid):{len(non0_q)/len(test_dataset.qdiff_array):.2f}-->{len( (test_dataset.qdiff_array!=0).nonzero()[0])/len(test_dataset.qdiff_array):.2f}")
-
+        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, diff_df= train_df, name="valid")
+        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, name="test")
 
         print("train_ids", len(train_users))
         print("valid_ids", len(valid_users))
@@ -393,7 +377,7 @@ if __name__ == "__main__":
         "--batch_size", type=float, default=512, help="train batch size"
     )
     parser.add_argument(
-        "--only_rp", type=int, default=1, help="train with only rp model"
+        "--only_rp", type=int, default=0, help="train with only rp model"
     )
     parser.add_argument(
         "--choose_cl", type=str, default="both", help="choose between q_cl and s_cl"
@@ -411,10 +395,6 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
     parser.add_argument("--optimizer", type=str, default="adam", help="optimizer")
     
-    parser.add_argument("--de_type", type=str, default="none_0", help="sde, rde")
-    parser.add_argument("--sparsity", type=float, default=1.0, help="sparsity of difficulty in valid/test dataset")
-    parser.add_argument("--balanced", type=int, default=0, help="set balanced testset")
-    
     parser.add_argument("--total_cnt_init", type=int, default=0, help="total_cnt_init")
     parser.add_argument("--diff_unk", type=float, default=0.5, help="diff_unk")
     
@@ -424,6 +404,8 @@ if __name__ == "__main__":
     parser.add_argument("--diff_as_loss_weight", action="store_true", default=False, help="diff_as_loss_weight")
     parser.add_argument("--valid_balanced", action="store_true", default=False, help="valid_balanced")
     parser.add_argument("--seed",  type=int, default=12405, help="seed")
+    
+    parser.add_argument("--de_type", type=str, default="alibi", help="difficulty encoding")
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
@@ -437,8 +419,6 @@ if __name__ == "__main__":
     cfg.train_config.learning_rate = args.lr
     cfg.train_config.optimizer = args.optimizer
     cfg.train_config.describe = args.describe
-    cfg.train_config.sparsity = args.sparsity
-    cfg.train_config.balanced = args.balanced
     cfg.train_config.gpu_num = args.gpu_num
     cfg.train_config.server_num = args.server_num
     cfg.train_config.diff_as_loss_weight = args.diff_as_loss_weight
@@ -448,8 +428,6 @@ if __name__ == "__main__":
     cfg.total_cnt_init = args.total_cnt_init
     cfg.diff_unk = args.diff_unk
     
-    assert args.de_type.split('_')[0] in ["sde", "lsde", "rde", "lrde", "none"], "de_type error! not in [sde, lsde, rde, lrde, none]"
-
     if args.model_name == "cl4kt":
         cfg.cl4kt_config = cfg.cl4kt_config[cfg.data_name]
         cfg.cl4kt_config.only_rp = args.only_rp
@@ -473,10 +451,9 @@ if __name__ == "__main__":
         # cfg.mkt_config.inter_lambda = args.inter_lambda
         # cfg.mkt_config.ques_lambda = args.ques_lambda
         # cfg.mkt_config.mask_prob = args.mask_prob
-        
+    
     cfg[f"{args.model_name}_config"].de_type =  args.de_type
     
-
     cfg.freeze()
 
     main(cfg)
