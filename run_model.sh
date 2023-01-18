@@ -1,3 +1,4 @@
+# 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
 server=25
 gpu=0
 

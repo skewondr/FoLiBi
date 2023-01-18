@@ -446,7 +446,7 @@ if __name__ == "__main__":
     #     cfg.akt_config.dropout = args.dropout
     elif args.model_name == "rdemkt":
         cfg.rdemkt_config = cfg.rdemkt_config[cfg.data_name]
-        cfg.rdemkt_config.only_rp = args.only_rp
+        cfg.rdemkt_config.only_rp = 1
         # cfg.mkt_config.choose_cl = args.choose_cl
         # cfg.mkt_config.inter_lambda = args.inter_lambda
         # cfg.mkt_config.ques_lambda = args.ques_lambda

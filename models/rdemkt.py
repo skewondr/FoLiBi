@@ -40,7 +40,6 @@ class RDEMKT(Module):
         self.d_ff = self.args["d_ff"]
         self.dropout = self.args["dropout"]
         self.only_rp = self.args["only_rp"]
-        self.only_rp = True
         self.choose_cl = self.args["choose_cl"]
         self.q_reg = self.args["ques_lambda"]
         self.i_reg = self.args["inter_lambda"]
@@ -134,6 +133,8 @@ class RDEMKT(Module):
                 diff_ox = torch.where(r==1 , diff * (r > -1).int(), (self.token_num+1) + diff * (r > -1).long())  
                 i_diff_ox = torch.where(r_i==1 , diff_i * (r_i > -1).int(), (self.token_num+1) + diff_i * (diff_i > -1).long())  
                 # i_diff_ox = torch.where(r_i == 0 , (diff_i -(self.token_num+1)) * (r_i > -1).int(), diff_i * (r_i > -1).int())
+            else: 
+                diff_ox = diff 
 
             if not self.only_rp:
                 ques_i_embed = self.question_embed(q_i) #original
@@ -194,7 +195,9 @@ class RDEMKT(Module):
                 diff = torch.bucketize(diff, boundaries)
                 diff_ox = torch.where(r==1 , diff * (r > -1).int(), (self.token_num+1) + diff * (r > -1).long())  
                 # diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
-
+            else: 
+                diff_ox = diff 
+                
         q_embed = self.question_embed(q)
         i_embed = self.get_interaction_embed(q, r, diff)
 
