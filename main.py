@@ -112,7 +112,7 @@ def main(config):
     print("MODEL", model_name)
     print(dataset)
     for fold, (train_ids, test_ids) in enumerate(kfold.split(users)):
-        # if fold >= 1 : break
+        if fold >= 1 : break
         if model_name == "akt":
             model_config = config.akt_config
             if data_name in ["statics", "assistments15"]:
@@ -405,7 +405,7 @@ if __name__ == "__main__":
     parser.add_argument("--valid_balanced", action="store_true", default=False, help="valid_balanced")
     parser.add_argument("--seed",  type=int, default=12405, help="seed")
     
-    parser.add_argument("--de_type", type=str, default="none", help="difficulty encoding")
+    parser.add_argument("--de_type", type=str, default="none_0", help="difficulty encoding")
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")

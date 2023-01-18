@@ -26,7 +26,7 @@ import copy
 import pandas as pd
 
 class CL4KTTransformerLayer(Module):
-    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none"):
+    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none_0"):
         super(CL4KTTransformerLayer, self).__init__()
         """
             This is a Basic Block of Transformer paper.
@@ -124,7 +124,7 @@ class CL4KTTransformerLayer(Module):
 
 
 class AKTTransformerLayer(Module):
-    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none"):
+    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none_0"):
         super(AKTTransformerLayer, self).__init__()
         """
             This is a Basic Block of Transformer paper.
@@ -221,7 +221,7 @@ class AKTTransformerLayer(Module):
 
 
 class MultiHeadAttentionWithIndividualFeatures(Module):
-    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none", bias=True):
+    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none_0", bias=True):
         super(MultiHeadAttentionWithIndividualFeatures, self).__init__()
         """
         It has projection layer for getting keys, queries, and values. Followed by attention and a connected layer.
@@ -245,7 +245,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
         if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(n_heads)
+            self.score = ALiBiPositionalEmbeddings(n_heads, de_type)
             
         xavier_uniform_(self.gammas)
 
@@ -286,7 +286,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
             if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
         if self.de_type.startswith("alibi") and diff is not None:
-            scores, attn_scores = attention(q, k, v, score_mask=self.score.buffered_future_mask(q),
+            scores, attn_scores = attention(q, k, v, score_mask=self.score.buffered_future_mask(q, diff),
                                      mask=mask, dropout=self.dropout)
         else:
             # calculate attention using function we will define next
@@ -306,7 +306,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
 
 
 class MultiHeadAttentionWithContextDistance(Module):
-    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none", bias=True):
+    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none_0", bias=True):
         super(MultiHeadAttentionWithContextDistance, self).__init__()
         """
         It has projection layer for getting keys, queries, and values. Followed by attention and a connected layer.
@@ -623,7 +623,7 @@ def clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, d_model, h, dropout=0.1, de_type="none"):
+    def __init__(self, d_model, h, dropout=0.1, de_type="none_0"):
         "Take in model size and number of heads."
         super(MultiheadAttention, self).__init__()
         assert d_model % h == 0

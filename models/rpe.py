@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as f
 from torch.nn import Module, Embedding, Linear, MultiheadAttention, LayerNorm, Dropout, CosineSimilarity
 import torch.linalg as la
 import numpy as np
@@ -161,7 +162,7 @@ class RotaryPositionalEmbeddings(nn.Module):
         return torch.cat((t_left, t, t_right), dim = -1)
 
 class ALiBiPositionalEmbeddings(nn.Module):
-    def __init__(self, attn_heads, max_len=100, bs=512):
+    def __init__(self, attn_heads, de_type="none_0", max_len=100, embedding_size=64):
         """
         * `d` is the number of features $d$
         * `base` is the constant used for calculating $\Theta$
@@ -169,12 +170,18 @@ class ALiBiPositionalEmbeddings(nn.Module):
         super().__init__()
         self.max_len = max_len
         self.attn_heads = attn_heads
-        self.slopes = torch.Tensor(self.get_slopes(attn_heads))
-        self.alibi = self.slopes.unsqueeze(1).unsqueeze(1) * torch.arange(max_len).unsqueeze(0).unsqueeze(0).expand(attn_heads, -1, -1) #attn_heads, 1, max_len 
-        self.alibi = self.alibi.view(attn_heads, 1, max_len)
-        self.alibi = self.alibi.repeat(bs, 1, 1)  # batch_size*attn_heads, 1, max_len
-        self._future_mask = torch.empty(0)
         
+        self.de = de_type.split('_')[0]
+        self.token_num = int(de_type.split('_')[1])
+            
+        if "0" in self.de:
+            self.slopes = torch.Tensor(self.get_slopes(attn_heads))
+            self.alibi = self.slopes.unsqueeze(1).unsqueeze(1) * torch.arange(max_len).unsqueeze(0).unsqueeze(0).expand(attn_heads, -1, -1) #attn_heads, 1, max_len 
+            self.alibi = self.alibi.view(attn_heads, 1, max_len)
+        if "2" in self.de:
+            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size))
+            self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
+            
     def get_slopes(self, n):
         """return list of lengnth n"""
         def get_slopes_power_of_2(n):
@@ -188,20 +195,67 @@ class ALiBiPositionalEmbeddings(nn.Module):
             return get_slopes_power_of_2(closest_power_of_2) + self.get_slopes(2*closest_power_of_2)[0::2][:n-closest_power_of_2]
         
         
-    def buffered_future_mask(self, tensor):
+    def buffered_future_mask(self, tensor, diff=None):
+        _future_mask = torch.triu(
+            self.fill_with_neg_inf(torch.zeros([self.max_len, self.max_len])), 1
+        ).unsqueeze(0)
         dim = tensor.size(2)
-        # self._future_mask.device != tensor.device is not working in TorchScript. This is a workaround.
-        if (
-            self._future_mask.size(0) == 0
-            or (not self._future_mask.device == tensor.device)
-            or self._future_mask.size(1) < self.max_len
-        ):
-            self._future_mask = torch.triu(
-                self.fill_with_neg_inf(torch.zeros([self.max_len, self.max_len])), 1
-            )
-            self._future_mask = self._future_mask.unsqueeze(0) + self.alibi #batch_size*attn_heads, max_len, max_len 
-        self._future_mask = self._future_mask.to(tensor)
-        return self._future_mask[:tensor.shape[0]*self.attn_heads, :dim, :dim]
+        if "0" in self.de and diff is not None:
+            _future_mask = _future_mask + self.alibi.repeat(tensor.shape[0], 1, 1) #batch_size*attn_heads, max_len, max_len 
+        if "1" in self.de and diff is not None:
+            x1 = diff.unsqueeze(-1).expand(-1, -1, self.max_len)
+            x2 = x1.transpose(-1, -2).contiguous()
+            diff_effect = torch.squeeze(1-torch.abs(x1- x2)[None, None, :, :].type(
+                torch.FloatTensor
+            ))  # [1, 1, seqlen, seqlen]
+            diff_effect = diff_effect.float()
+            # [batch_size, 8, seqlen, seqlen] positive distance
+            # dist_score => d(t, tau)
+            dist_scores = torch.where(diff_effect>0.9, diff_effect.double(), 0.).to(tensor.get_device())
+            dist_scores -= torch.diag(torch.ones(self.max_len))
+            dist_scores = dist_scores.repeat(self.attn_heads, 1, 1)  # batch_size*attn_heads, 1, max_len
+            _future_mask = _future_mask + dist_scores #batch_size*attn_heads, max_len, max_len 
+        if "2" in self.de and diff is not None:
+            x1 = self.diff_emb(diff)
+            x1 /= x1.norm(dim=-1, keepdim=True)
+            diff_effect = x1@x1.transpose(-1, -2)
+            # [batch_size, 8, seqlen, seqlen] positive distance
+            # dist_score => d(t, tau)
+            dist_scores = torch.where(diff_effect>0.9, diff_effect.double(), 0.).to(tensor.get_device())
+            dist_scores -= torch.diag(torch.ones(self.max_len))
+            dist_scores = dist_scores.repeat(self.attn_heads, 1, 1)  # batch_size*attn_heads, 1, max_len
+            _future_mask = _future_mask + dist_scores #batch_size*attn_heads, max_len, max_len 
+        if "3" in self.de and diff is not None:
+            x1 = (1-diff).unsqueeze(-1).expand(-1, -1, self.max_len)
+            x2 = x1.transpose(-1, -2).contiguous()
+            diff_effect = (x1 + x2)/2
+            diff_effect = torch.squeeze(diff_effect[None, None, :, :].type(
+                torch.FloatTensor
+            ))  # [1, 1, seqlen, seqlen]
+            diff_effect = diff_effect.float()
+            # [batch_size, 8, seqlen, seqlen] positive distance
+            # dist_score => d(t, tau)
+            dist_scores = torch.where(diff_effect>0.5, diff_effect.double(), 0.).to(tensor.get_device())
+            dist_scores = dist_scores.repeat(self.attn_heads, 1, 1)  # batch_size*attn_heads, 1, max_len
+            _future_mask = _future_mask + dist_scores #batch_size*attn_heads, max_len, max_len 
+        if "4" in self.de and diff is not None:
+            bins = f.normalize(torch.bincount(torch.flatten(diff)).float(), dim =0)
+            diff_freq = torch.gather(bins.repeat(tensor.shape[0], self.max_len, 1), -1, diff.unsqueeze(-1)).squeeze()
+            x1 = (1-diff_freq).unsqueeze(-1).expand(-1, -1, self.max_len)
+            x2 = x1.transpose(-1, -2).contiguous()
+            diff_effect = (x1 + x2)/2
+            diff_effect = torch.squeeze(diff_effect[None, None, :, :].type(
+                torch.FloatTensor
+            ))  # [1, 1, seqlen, seqlen]
+            diff_effect = diff_effect.float()
+            # [batch_size, 8, seqlen, seqlen] positive distance
+            # dist_score => d(t, tau)
+            dist_scores = torch.where(diff_effect>0.5, diff_effect.double(), 0.).to(tensor.get_device())
+            dist_scores = dist_scores.repeat(self.attn_heads, 1, 1)  # batch_size*attn_heads, 1, max_len
+            _future_mask = _future_mask + dist_scores #batch_size*attn_heads, max_len, max_len 
+        
+        _future_mask = _future_mask.to(tensor)
+        return _future_mask[:tensor.shape[0]*self.attn_heads, :dim, :dim]
 
 
     def fill_with_neg_inf(self, t):
