@@ -22,7 +22,7 @@ from .modules import CL4KTTransformerLayer
 
 if torch.cuda.is_available():
     torch.set_default_tensor_type(torch.cuda.FloatTensor)
-
+from .rpe import SinusoidalPositionalEmbeddings 
 
 class CL4KT(Module):
     def __init__(self, device, num_skills, num_questions, seq_len, **kwargs):
@@ -43,7 +43,13 @@ class CL4KT(Module):
         self.hard_negative_weight = self.args["hard_negative_weight"]
         self.only_rp = self.args["only_rp"]
         self.choose_cl = self.args["choose_cl"]
+        self.de = self.args["de_type"].split('_')[0]
+        self.token_num = int(self.args["de_type"].split('_')[1])
 
+        if self.de.startswith("sde"):
+            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), self.hidden_size)).to(device)
+            self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
+            
         self.question_embed = Embedding(
             self.num_skills + 2, self.hidden_size, padding_idx=0
         )
@@ -61,6 +67,7 @@ class CL4KT(Module):
                     n_heads=self.num_attn_heads,
                     dropout=self.dropout,
                     kq_same=self.kq_same,
+                    de_type=self.de,
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -75,6 +82,7 @@ class CL4KT(Module):
                     n_heads=self.num_attn_heads,
                     dropout=self.dropout,
                     kq_same=self.kq_same,
+                    de_type=self.de,
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -114,15 +122,26 @@ class CL4KT(Module):
                 "responses"
             ]  # augmented r_i, augmented r_j and original r
             attention_mask_i, attention_mask_j, attention_mask = batch["attention_mask"]
+            diff_i, diff_j, diff = batch["sdiff"]
+            
+            if self.de.startswith("sde"):
+                boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
+                diff = torch.bucketize(diff, boundaries)
+                diff_i = torch.bucketize(diff_i, boundaries)
+                diff_j = torch.bucketize(diff_j, boundaries)
+                diff_ox = torch.where(r == 0 ,  (diff -(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())
+                i_diff_ox = torch.where(r_i == 0 , (diff_i -(self.token_num+1)) * (r_i > -1).int(), diff_i * (r_i > -1).int())
+                j_diff_ox = torch.where(r_j == 0 , (diff_j -(self.token_num+1)) * (r_j > -1).int(), diff_j * (r_j > -1).int())
+                neg_diff = torch.where(neg_r == 0 , (diff -(self.token_num+1)) * (neg_r > -1).int(), diff * (neg_r > -1).int())
 
             if not self.only_rp:
                 ques_i_embed = self.question_embed(q_i)
                 ques_j_embed = self.question_embed(q_j)
-                inter_i_embed = self.get_interaction_embed(q_i, r_i)
-                inter_j_embed = self.get_interaction_embed(q_j, r_j)
+                inter_i_embed = self.get_interaction_embed(q_i, r_i, diff_i)
+                inter_j_embed = self.get_interaction_embed(q_j, r_j, diff_j)
                 if self.negative_prob > 0:
                     # inter_k_embed = self.get_negative_interaction_embed(q, r) # hard negative
-                    inter_k_embed = self.get_interaction_embed(q, neg_r)
+                    inter_k_embed = self.get_interaction_embed(q, neg_r, diff)
 
                 # mask=2 means bidirectional attention of BERT
                 ques_i_score, ques_j_score = ques_i_embed, ques_j_embed
@@ -137,6 +156,7 @@ class CL4KT(Module):
                             key=ques_i_score,
                             values=ques_i_score,
                             apply_pos=False,
+                            diff=diff_i,
                         )
                         ques_j_score, _ = block(
                             mask=2,
@@ -144,6 +164,7 @@ class CL4KT(Module):
                             key=ques_j_score,
                             values=ques_j_score,
                             apply_pos=False,
+                            diff=diff_j,
                         )
                 if self.choose_cl in ["s_cl", "both"]:
                     for block in self.interaction_encoder:
@@ -153,6 +174,7 @@ class CL4KT(Module):
                             key=inter_i_score,
                             values=inter_i_score,
                             apply_pos=False,
+                            diff=diff_i,
                         )
                         inter_j_score, _ = block(
                             mask=2,
@@ -160,6 +182,7 @@ class CL4KT(Module):
                             key=inter_j_score,
                             values=inter_j_score,
                             apply_pos=False,
+                            diff=diff_j,
                         )
                         if self.negative_prob > 0:
                             inter_k_score, _ = block(
@@ -168,6 +191,7 @@ class CL4KT(Module):
                                 key=inter_k_embed,
                                 values=inter_k_embed,
                                 apply_pos=False,
+                                diff=diff,
                             )
                 if self.choose_cl in ["q_cl", "both"]:
                     pooled_ques_i_score = (ques_i_score * attention_mask_i.unsqueeze(-1)).sum(
@@ -232,17 +256,23 @@ class CL4KT(Module):
             r = batch["responses"]  # augmented r_i, augmented r_j and original r
 
             attention_mask = batch["attention_mask"]
+            diff = batch["sdiff"]
             question_cl_loss, interaction_cl_loss = 0, 0
+            
+            if self.de.startswith("sde"):
+                boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
+                diff = torch.bucketize(diff, boundaries)
+                diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
 
         q_embed = self.question_embed(q)
-        i_embed = self.get_interaction_embed(q, r)
+        i_embed = self.get_interaction_embed(q, r, diff)
 
         x, y = q_embed, i_embed
         for block in self.question_encoder:
-            x, _ = block(mask=1, query=x, key=x, values=x, apply_pos=True)
+            x, _ = block(mask=1, query=x, key=x, values=x, diff=diff, apply_pos=True)
 
         for block in self.interaction_encoder:
-            y, _ = block(mask=1, query=y, key=y, values=y, apply_pos=True)
+            y, _ = block(mask=1, query=y, key=y, values=y, diff=diff, apply_pos=True)
 
         for block in self.knoweldge_retriever:
             x, attn = block(mask=0, query=x, key=x, values=y, apply_pos=True)
@@ -290,10 +320,17 @@ class CL4KT(Module):
 
         return loss, len(pred[mask]), true[mask].sum().item()
 
-    def get_interaction_embed(self, skills, responses):
+    def get_interaction_embed(self, skills, responses, diff):
         masked_responses = responses * (responses > -1).long()
         interactions = skills + self.num_skills * masked_responses
-        return self.interaction_embed(interactions)
+        output = self.interaction_embed(interactions)
+        if self.de.startswith("sde"):
+            diffx = (self.token_num+1) + diff * (responses > -1).long()
+            diffo = diff * (responses > -1).int()
+            diffox = torch.where(responses == 0 ,diffo, diffx)
+            demb = self.diff_emb(diffox).float()
+            output += demb
+        return output
 
 
 def gelu(x):
