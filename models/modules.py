@@ -244,7 +244,9 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
         self.de_type = de_type
         if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
-
+        if self.de_type.startswith("alibi"):
+            self.score = ALiBiPositionalEmbeddings(n_heads)
+            
         xavier_uniform_(self.gammas)
 
         self._reset_parameters()
@@ -283,12 +285,15 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
             q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
             if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
-
-        # calculate attention using function we will define next
-        gammas = self.gammas
-        scores, attn_scores = individual_attention(
-            q, k, v, self.d_k, mask, self.dropout, gammas
-        )
+        if self.de_type.startswith("alibi") and diff is not None:
+            scores, attn_scores = attention(q, k, v, score_mask=self.score.buffered_future_mask(q),
+                                     mask=mask, dropout=self.dropout)
+        else:
+            # calculate attention using function we will define next
+            gammas = self.gammas
+            scores, attn_scores = individual_attention(
+                q, k, v, self.d_k, mask, self.dropout, gammas
+            )
 
         # concatenate heads and put through final linear layer
         concat = scores.transpose(1, 2).contiguous().view(bs, -1, self.d_model)
@@ -325,7 +330,9 @@ class MultiHeadAttentionWithContextDistance(Module):
         self.de_type = de_type
         if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
-
+        if self.de_type.startswith("alibi"):
+            self.score = ALiBiPositionalEmbeddings(n_heads)
+            
         xavier_uniform_(self.gammas)
 
         self._reset_parameters()
@@ -364,13 +371,16 @@ class MultiHeadAttentionWithContextDistance(Module):
             q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
             if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
-
-        # calculate attention using function we will define next
-        gammas = self.gammas
-        scores, attn = monotonic_attention(
-            q, k, v, self.d_k, mask, self.dropout, gammas
-        )
-
+        if self.de_type.startswith("alibi") and diff is not None:
+            scores, attn = attention(q, k, v, score_mask=self.score.buffered_future_mask(q),
+                                     mask=mask, dropout=self.dropout)
+        else:
+            # calculate attention using function we will define next
+            gammas = self.gammas
+            scores, attn = monotonic_attention(
+                q, k, v, self.d_k, mask, self.dropout, gammas
+            )
+                
         # concatenate heads and put through final linear layer
         concat = scores.transpose(1, 2).contiguous().view(bs, -1, self.d_model)
 

@@ -104,10 +104,7 @@ class Blocks(Module):
         super().__init__()
         self.device = device
         self.de = de
-        if self.de.startswith("alibi"):
-            self.attn = MultiheadAttention(embedding_size, num_attn_heads, de_type=de, dropout=dropout)
-        else:
-            self.attn = MultiheadAttention(embedding_size, num_attn_heads, dropout=dropout)
+        self.attn = MultiheadAttention(embedding_size, num_attn_heads, de_type=de, dropout=dropout)
         self.attn_dropout = Dropout(dropout)
         self.attn_layer_norm = LayerNorm(embedding_size)
 

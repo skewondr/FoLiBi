@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 if torch.cuda.is_available():
     torch.set_default_tensor_type(torch.cuda.FloatTensor)
-
+from .rpe import SinusoidalPositionalEmbeddings 
 
 class AKT(Module):
     def __init__(
@@ -20,6 +20,7 @@ class AKT(Module):
         embedding_size,
         num_blocks,
         kq_same,
+        de_type="none",
         model_type="akt",
         num_attn_heads=8,
         final_fc_dim=512,
@@ -79,7 +80,14 @@ class AKT(Module):
             self.r_embed = Embedding(
                 2 + 1, self.embedding_size, padding_idx=0
             )  # e_{(c_t, r_t)} 
-
+            
+        self.de = de_type.split('_')[0]
+        self.token_num = int(de_type.split('_')[1])
+        
+        if self.de.startswith("sde"):
+            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
+            self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
+            
         self.model = Architecture(
             n_question=self.num_skills,
             n_blocks=self.num_blocks,
@@ -90,6 +98,7 @@ class AKT(Module):
             d_ff=self.d_ff,
             kq_same=self.kq_same,
             model_type=self.model_type,
+            de=self.de,
         )
 
         self.out = Sequential(
@@ -115,6 +124,12 @@ class AKT(Module):
         attention_mask = feed_dict["attention_mask"]
         masked_r = r * (r > -1).long()
         pid_data = feed_dict["questions"]
+        diff = feed_dict["sdiff"]
+        
+        if self.de.startswith("sde"):
+            boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
+            diff = torch.bucketize(diff, boundaries)
+            diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
 
         q_embed_data = self.q_embed(q)  # c_{c_t}: [batch_size, seq_len, embedding_size]
         if self.separate_qr:
@@ -139,9 +154,16 @@ class AKT(Module):
                 # , where e_{(c_t, r_t)} = c_{c_t} + g_{r_t}
                 # f_{(c_t, r_t)} = f_{(c_t, r_t)} + d_{c_t}
                 # e_{(c_t, r_t)} + \mu_{q_t} * (h_{r_t} + d_{c_t})
-                qr_embed_data = qr_embed_data + pid_embed_data * (
-                    qr_embed_diff_data + q_embed_diff_data
-                )
+                if self.de.startswith("sde"):
+                    diffx = (self.token_num+1) + diff * (r > -1).long()
+                    diffo = diff * (r > -1).int()
+                    diffox = torch.where(r == 0 ,diffo, diffx)
+                    demb = self.diff_emb(diffox).float()
+                    qr_embed_data += demb
+                else:
+                    qr_embed_data = qr_embed_data + pid_embed_data * (
+                        qr_embed_diff_data + q_embed_diff_data
+                    )
 
             c_reg_loss = torch.mean(pid_embed_data ** 2.0) * self.reg_l
         else:
@@ -158,7 +180,7 @@ class AKT(Module):
         # pass to the decoder
         # output shape [batch_size, seq_len, d_model or d_model//2]
         # d_output is h_t
-        d_output, attn = self.model(q_embed_data, qr_embed_data)  # 211x512
+        d_output, attn = self.model(q_embed_data, qr_embed_data, diff)  # 211x512
 
         concat_q = torch.cat([d_output, q_embed_data], dim=-1)  # concat([h_t, x_t])
         output = torch.sigmoid(self.out(concat_q)).squeeze()
@@ -208,6 +230,7 @@ class Architecture(Module):
         dropout,
         kq_same,
         model_type,
+        de="none",
     ):
         super().__init__()
         """
@@ -219,7 +242,7 @@ class Architecture(Module):
         self.d_model = d_model
         self.model_type = model_type
         print("model_type", model_type)
-
+        self.de = de
         if model_type == "akt":
             self.blocks_1 = ModuleList(
                 [
@@ -230,6 +253,7 @@ class Architecture(Module):
                         dropout=dropout,
                         n_heads=n_heads,
                         kq_same=kq_same,
+                        de_type=de,
                     )
                     for _ in range(n_blocks)
                 ]
@@ -243,12 +267,13 @@ class Architecture(Module):
                         dropout=dropout,
                         n_heads=n_heads,
                         kq_same=kq_same,
+                        de_type=de,
                     )
                     for _ in range(n_blocks * 2)
                 ]
             )
 
-    def forward(self, q_embed_data, qa_embed_data):
+    def forward(self, q_embed_data, qa_embed_data, diff=None):
         # target shape  bs, seqlen
         seqlen, batch_size = q_embed_data.size(1), q_embed_data.size(0)
 
@@ -268,14 +293,14 @@ class Architecture(Module):
             mask: 0 means that it can peek only past values.
             1 means that block can peek only current and past values
             """
-            y, _ = block(mask=1, query=y, key=y, values=y)
+            y, _ = block(mask=1, query=y, key=y, values=y, diff=diff)
         flag_first = True
         for block in self.blocks_2:
             if flag_first:  # peek current question
                 # question encoder
                 # x^{\hat}_{t} = f_{enc_1} (x_1, ..., x_t)
                 # x can see both current and past information
-                x, _ = block(mask=1, query=x, key=x, values=x, apply_pos=False)
+                x, _ = block(mask=1, query=x, key=x, values=x, diff=diff, apply_pos=False)
                 flag_first = False
             else:  # dont peek current response
                 # knoweldge retriever
