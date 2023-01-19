@@ -217,9 +217,10 @@ class ALiBiPositionalEmbeddings(nn.Module):
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
             diff_effect -= torch.diag(torch.ones(self.max_len)*(self.token_num+1)) #batch_size, max_len, max+len 
-            dist_scores = torch.where(diff_effect>(self.token_num+1)*0.9, diff_effect.double(), 0.).to(tensor.get_device())
+            dist_scores = torch.where(diff_effect>(self.token_num+1)*0.5, diff_effect.double(), 0.).to(tensor.get_device())
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
-            _future_mask = _future_mask + dist_scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #batch_size*attn_heads, max_len, max_len 
+            dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
+            _future_mask = _future_mask + dist_scores #batch_size*attn_heads, max_len, max_len 
         if "2" in self.de and diff is not None:
             """서로 비슷한 난이도의 attention score의 영향력을 상대적으로 높게 부여: 내적값"""
             """답변에 따른 대칭적 난이도의 차가 클수록 attention score의 영향력을 상대적으로 높게 부여."""
@@ -229,9 +230,10 @@ class ALiBiPositionalEmbeddings(nn.Module):
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
             diff_effect -= torch.diag(torch.ones(self.max_len))
-            dist_scores = torch.where(diff_effect>0.9, diff_effect.double(), 0.).to(tensor.get_device())
+            dist_scores = torch.where(diff_effect>0.5, diff_effect.double(), 0.).to(tensor.get_device())
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
-            _future_mask = _future_mask + dist_scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #batch_size, attn_heads, max_len, max_len 
+            dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)*100 
+            _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         if "3" in self.de and diff is not None:
             """높은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
             x1 = ((self.token_num+1)-diff).unsqueeze(1).repeat(1, self.max_len, 1)
@@ -243,9 +245,10 @@ class ALiBiPositionalEmbeddings(nn.Module):
             diff_effect = diff_effect.float()
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
-            dist_scores = torch.where(diff_effect>(self.token_num+1)*0.9, diff_effect.double(), 0.).to(tensor.get_device())
+            dist_scores = torch.where(diff_effect>(self.token_num+1)*0.5, diff_effect.double(), 0.).to(tensor.get_device())
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
-            _future_mask = _future_mask + dist_scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #batch_size, attn_heads, max_len, max_len 
+            dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
+            _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         if "4" in self.de and diff is not None:
             """등장 빈도가 낮은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
             bins = f.normalize(torch.bincount(torch.flatten(diff)).float(), dim =0)
@@ -259,9 +262,10 @@ class ALiBiPositionalEmbeddings(nn.Module):
             diff_effect = diff_effect.float()
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
-            dist_scores = torch.where(diff_effect>0.9, diff_effect.double(), 0.).to(tensor.get_device())
+            dist_scores = torch.where(diff_effect>0.5, diff_effect.double(), 0.).to(tensor.get_device())
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
-            _future_mask = _future_mask + dist_scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #batch_size, attn_heads, max_len, max_len 
+            dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)*100 
+            _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         
         _future_mask = _future_mask.to(tensor)
         return _future_mask[:tensor.shape[0]*self.attn_heads, :dim, :dim]

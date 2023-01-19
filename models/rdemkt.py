@@ -56,7 +56,7 @@ class RDEMKT(Module):
             self.num_skills + 2, self.hidden_size, padding_idx=0
         )
         self.answer_embed = Embedding(
-            2 + 1, self.hidden_size, padding_idx=2
+            2, self.hidden_size
         )
         self.sim = Similarity(temp=self.args["temp"])
 
@@ -84,7 +84,7 @@ class RDEMKT(Module):
                     n_heads=self.num_attn_heads,
                     dropout=self.dropout,
                     kq_same=self.kq_same,
-                    # de_type=self.de_type,
+                    de_type=self.de_type,
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -138,11 +138,22 @@ class RDEMKT(Module):
             if not self.only_rp:
                 ques_i_embed = self.question_embed(q_i) #original
                 inter_i_embed = self.get_interaction_embed(q, r_i, diff_i) #masked
+                q_enc = None
+                i_enc = None 
                 if self.de.startswith("sde"):
-                    if "g" in self.choose_enc:
+                    if "q" in self.choose_enc:
                         ques_i_embed += self.diff_emb(diff).float()
                     if "i" in self.choose_enc:
                         inter_i_embed += self.diff_emb(diff).float()
+                    if "i2" in self.choose_enc:
+                        inter_i_embed += self.diff_emb(diff_ox).float()
+                else:
+                    if "q" in self.choose_enc:
+                        q_enc = diff
+                    if "i" in self.choose_enc:
+                        i_enc = diff 
+                    if "i2" in self.choose_enc:
+                        i_enc = diff_ox                     
 
                 # BERT
                 if self.choose_cl in ["q_cl", "both"]:
@@ -153,7 +164,7 @@ class RDEMKT(Module):
                             key=ques_i_embed,
                             values=ques_i_embed,
                             apply_pos=False,
-                            diff=diff_i,
+                            diff=q_enc,
                         )
                 if self.choose_cl in ["s_cl", "both"]:
                     for block in self.interaction_encoder:
@@ -163,7 +174,7 @@ class RDEMKT(Module):
                             key=inter_i_embed,
                             values=inter_i_embed,
                             apply_pos=False,
-                            diff=None,
+                            diff=i_enc,
                         )
                 if self.choose_cl in ["q_cl", "both"]:
                     q_pred = self.q_out(ques_i_score)
@@ -205,18 +216,29 @@ class RDEMKT(Module):
                 
         q_embed = self.question_embed(q)
         i_embed = self.get_interaction_embed(q, r, diff)
+        q_enc = None
+        i_enc = None 
         if self.de.startswith("sde"):
-            if "g" in self.choose_enc:
+            if "q" in self.choose_enc:
                 q_embed += self.diff_emb(diff).float()
             if "i" in self.choose_enc:
                 i_embed += self.diff_emb(diff).float()
-            
+            if "i2" in self.choose_enc:
+                i_embed += self.diff_emb(diff_ox).float()
+        else:
+            if "q" in self.choose_enc:
+                q_enc = diff
+            if "i" in self.choose_enc:
+                i_enc = diff 
+            if "i2" in self.choose_enc:
+                i_enc = diff_ox    
+
         x, y = q_embed, i_embed
         for block in self.question_encoder:
-            x, _ = block(mask=1, query=x, key=x, values=x, diff=diff, apply_pos=True)
+            x, _ = block(mask=1, query=x, key=x, values=x, diff=q_enc, apply_pos=True)
 
         for block in self.interaction_encoder:
-            y, _ = block(mask=1, query=y, key=y, values=y, diff=None, apply_pos=True)
+            y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc, apply_pos=True)
 
         for block in self.knoweldge_retriever:
             x, attn = block(mask=0, query=x, key=x, values=y, diff=None, apply_pos=True)
@@ -274,7 +296,7 @@ class RDEMKT(Module):
         return loss, len(pred[mask]), true[mask].sum().item()
 
     def get_interaction_embed(self, skills, responses, diff):
-        masked_responses = torch.where(responses == -1, 2, responses)
+        masked_responses = responses * (responses > -1).long()
         output = self.question_embed(skills) + self.answer_embed(masked_responses)
 
         return output
