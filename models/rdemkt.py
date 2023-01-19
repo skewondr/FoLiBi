@@ -83,7 +83,7 @@ class RDEMKT(Module):
                     n_heads=self.num_attn_heads,
                     dropout=self.dropout,
                     kq_same=self.kq_same,
-                    de_type=self.de_type,
+                    # de_type=self.de_type,
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -126,7 +126,7 @@ class RDEMKT(Module):
             attention_mask_i, attention_mask, attention_mask_n = batch["attention_mask"]
             diff_i, diff = batch["sdiff"]
             
-            if self.de.startswith("sde") or "2" in self.de or "4" in self.de:
+            if self.token_num < 1000:
                 boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
                 diff = torch.bucketize(diff, boundaries)
                 diff_i = torch.bucketize(diff_i, boundaries)
@@ -134,8 +134,11 @@ class RDEMKT(Module):
                 i_diff_ox = torch.where(r_i==1 , diff_i * (r_i > -1).int(), (self.token_num+1) + diff_i * (diff_i > -1).long())  
                 # i_diff_ox = torch.where(r_i == 0 , (diff_i -(self.token_num+1)) * (r_i > -1).int(), diff_i * (r_i > -1).int())
             else: 
-                diff_ox = diff 
-
+                diff = None 
+                diff_ox = None 
+                diff_i = None
+                i_diff_ox = None
+                
             if not self.only_rp:
                 ques_i_embed = self.question_embed(q_i) #original
                 inter_i_embed = self.get_interaction_embed(q, r_i, diff_i) #masked
@@ -159,7 +162,7 @@ class RDEMKT(Module):
                             key=inter_i_embed,
                             values=inter_i_embed,
                             apply_pos=False,
-                            diff=i_diff_ox,
+                            diff=None,
                         )
                 if self.choose_cl in ["q_cl", "both"]:
                     q_pred = self.q_out(ques_i_score)
@@ -190,13 +193,14 @@ class RDEMKT(Module):
             diff = batch["sdiff"]
             question_mkm_loss, interaction_mkm_loss = 0, 0
             
-            if self.de.startswith("sde") or "2" in self.de or "4" in self.de:
+            if self.token_num < 1000:
                 boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
                 diff = torch.bucketize(diff, boundaries)
                 diff_ox = torch.where(r==1 , diff * (r > -1).int(), (self.token_num+1) + diff * (r > -1).long())  
                 # diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
             else: 
-                diff_ox = diff 
+                diff = None 
+                diff_ox = None 
                 
         q_embed = self.question_embed(q)
         i_embed = self.get_interaction_embed(q, r, diff)
@@ -206,7 +210,7 @@ class RDEMKT(Module):
             x, _ = block(mask=1, query=x, key=x, values=x, diff=diff, apply_pos=True)
 
         for block in self.interaction_encoder:
-            y, _ = block(mask=1, query=y, key=y, values=y, diff=diff_ox, apply_pos=True)
+            y, _ = block(mask=1, query=y, key=y, values=y, diff=None, apply_pos=True)
 
         for block in self.knoweldge_retriever:
             x, attn = block(mask=0, query=x, key=x, values=y, diff=None, apply_pos=True)

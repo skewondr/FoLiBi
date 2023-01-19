@@ -610,7 +610,7 @@ def attention(query, key, value, score_mask=None, mask=None, dropout=None):
     scores = torch.matmul(query, key.transpose(-2, -1)) \
              / math.sqrt(d_k)
     if score_mask is not None:
-        scores += score_mask.view(scores.shape)
+        scores += score_mask
     if mask is not None:
         scores = scores.masked_fill(mask == 0, -1e9)
     p_attn = F.softmax(scores, dim=-1)
