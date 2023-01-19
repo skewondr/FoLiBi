@@ -406,6 +406,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed",  type=int, default=12405, help="seed")
     
     parser.add_argument("--de_type", type=str, default="none_0", help="difficulty encoding")
+    parser.add_argument("--choose_enc", type=str, default="g", help="choose encoder")
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
@@ -447,6 +448,7 @@ if __name__ == "__main__":
     elif args.model_name == "rdemkt":
         cfg.rdemkt_config = cfg.rdemkt_config[cfg.data_name]
         cfg.rdemkt_config.only_rp = 1
+        cfg.rdemkt_config.choose_enc = args.choose_enc
         # cfg.mkt_config.choose_cl = args.choose_cl
         # cfg.mkt_config.inter_lambda = args.inter_lambda
         # cfg.mkt_config.ques_lambda = args.ques_lambda

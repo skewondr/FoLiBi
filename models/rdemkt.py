@@ -46,6 +46,7 @@ class RDEMKT(Module):
         self.de = self.args["de_type"].split('_')[0]
         self.token_num = int(self.args["de_type"].split('_')[1])
         self.de_type = self.args["de_type"]
+        self.choose_enc = self.args["choose_enc"]
 
         if self.de.startswith("sde"):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), self.hidden_size)).to(device)
@@ -129,19 +130,19 @@ class RDEMKT(Module):
             if self.token_num < 1000:
                 boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
                 diff = torch.bucketize(diff, boundaries)
-                diff_i = torch.bucketize(diff_i, boundaries)
                 diff_ox = torch.where(r==1 , diff * (r > -1).int(), (self.token_num+1) + diff * (r > -1).long())  
-                i_diff_ox = torch.where(r_i==1 , diff_i * (r_i > -1).int(), (self.token_num+1) + diff_i * (diff_i > -1).long())  
-                # i_diff_ox = torch.where(r_i == 0 , (diff_i -(self.token_num+1)) * (r_i > -1).int(), diff_i * (r_i > -1).int())
             else: 
                 diff = None 
                 diff_ox = None 
-                diff_i = None
-                i_diff_ox = None
                 
             if not self.only_rp:
                 ques_i_embed = self.question_embed(q_i) #original
                 inter_i_embed = self.get_interaction_embed(q, r_i, diff_i) #masked
+                if self.de.startswith("sde"):
+                    if "g" in self.choose_enc:
+                        ques_i_embed += self.diff_emb(diff).float()
+                    if "i" in self.choose_enc:
+                        inter_i_embed += self.diff_emb(diff).float()
 
                 # BERT
                 if self.choose_cl in ["q_cl", "both"]:
@@ -204,7 +205,12 @@ class RDEMKT(Module):
                 
         q_embed = self.question_embed(q)
         i_embed = self.get_interaction_embed(q, r, diff)
-
+        if self.de.startswith("sde"):
+            if "g" in self.choose_enc:
+                q_embed += self.diff_emb(diff).float()
+            if "i" in self.choose_enc:
+                i_embed += self.diff_emb(diff).float()
+            
         x, y = q_embed, i_embed
         for block in self.question_encoder:
             x, _ = block(mask=1, query=x, key=x, values=x, diff=diff, apply_pos=True)
@@ -269,13 +275,8 @@ class RDEMKT(Module):
 
     def get_interaction_embed(self, skills, responses, diff):
         masked_responses = torch.where(responses == -1, 2, responses)
-        output = interactions = self.question_embed(skills) + self.answer_embed(masked_responses)
-        if self.de.startswith("sde"):
-            diffx = (self.token_num+1) + diff * (responses > -1).long()
-            diffo = diff * (responses > -1).int()
-            diffox = torch.where(responses == 0 ,diffo, diffx)
-            demb = self.diff_emb(diffox).float()
-            output += demb
+        output = self.question_embed(skills) + self.answer_embed(masked_responses)
+
         return output
 
 def gelu(x):
