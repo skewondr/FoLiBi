@@ -213,10 +213,10 @@ class ALiBiPositionalEmbeddings(nn.Module):
             diff_effect = torch.squeeze((self.token_num+1)-torch.abs(x1- x2)[None, None, :, :].type(
                 torch.FloatTensor
             ))  # [1, 1, seqlen, seqlen]
-            diff_effect = diff_effect.float()
+            diff_effect = diff_effect.float().to(tensor.get_device())
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
-            dist_scores -= torch.diag(torch.ones(self.max_len)*(self.token_num+1)) #batch_size, max_len, max+len 
+            diff_effect -= torch.diag(torch.ones(self.max_len)*(self.token_num+1)) #batch_size, max_len, max+len 
             dist_scores = torch.where(diff_effect>(self.token_num+1)*0.9, diff_effect.double(), 0.).to(tensor.get_device())
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
             _future_mask = _future_mask + dist_scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #batch_size*attn_heads, max_len, max_len 
@@ -225,10 +225,10 @@ class ALiBiPositionalEmbeddings(nn.Module):
             """답변에 따른 대칭적 난이도의 차가 클수록 attention score의 영향력을 상대적으로 높게 부여."""
             x1 = self.diff_emb(diff)
             x1 /= x1.norm(dim=-1, keepdim=True)
-            diff_effect = x1@x1.transpose(-1, -2)
+            diff_effect = x1@x1.transpose(-1, -2).to(tensor.get_device())
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
-            dist_scores -= torch.diag(torch.ones(self.max_len))
+            diff_effect -= torch.diag(torch.ones(self.max_len))
             dist_scores = torch.where(diff_effect>0.9, diff_effect.double(), 0.).to(tensor.get_device())
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
             _future_mask = _future_mask + dist_scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #batch_size, attn_heads, max_len, max_len 
