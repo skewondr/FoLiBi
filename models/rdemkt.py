@@ -143,10 +143,10 @@ class RDEMKT(Module):
                 if self.de.startswith("sde"):
                     if "q" in self.choose_enc:
                         ques_i_embed += self.diff_emb(diff).float()
-                    if "i" in self.choose_enc:
-                        inter_i_embed += self.diff_emb(diff).float()
                     if "i2" in self.choose_enc:
                         inter_i_embed += self.diff_emb(diff_ox).float()
+                    elif "i" in self.choose_enc:
+                        inter_i_embed += self.diff_emb(diff).float()
                 else:
                     if "q" in self.choose_enc:
                         q_enc = diff
@@ -221,10 +221,10 @@ class RDEMKT(Module):
         if self.de.startswith("sde"):
             if "q" in self.choose_enc:
                 q_embed += self.diff_emb(diff).float()
-            if "i" in self.choose_enc:
-                i_embed += self.diff_emb(diff).float()
             if "i2" in self.choose_enc:
                 i_embed += self.diff_emb(diff_ox).float()
+            elif "i" in self.choose_enc:
+                i_embed += self.diff_emb(diff).float()
         else:
             if "q" in self.choose_enc:
                 q_enc = diff
