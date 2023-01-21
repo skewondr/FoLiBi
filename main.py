@@ -463,6 +463,7 @@ if __name__ == "__main__":
         # cfg.mkt_config.mask_prob = args.mask_prob
     
     cfg[f"{args.model_name}_config"].de_type =  args.de_type
+    cfg[f"{args.model_name}_config"].choose_enc =  args.choose_enc
     
     cfg.freeze()
 

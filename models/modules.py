@@ -331,7 +331,7 @@ class MultiHeadAttentionWithContextDistance(Module):
         if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(n_heads)
+            self.score = ALiBiPositionalEmbeddings(n_heads, de_type)
             
         xavier_uniform_(self.gammas)
 
@@ -372,7 +372,7 @@ class MultiHeadAttentionWithContextDistance(Module):
             if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
         if self.de_type.startswith("alibi") and diff is not None:
-            scores, attn = attention(q, k, v, score_mask=self.score.buffered_future_mask(q),
+            scores, attn = attention(q, k, v, score_mask=self.score.buffered_future_mask(q, diff),
                                      mask=mask, dropout=self.dropout)
         else:
             # calculate attention using function we will define next
@@ -637,7 +637,8 @@ class MultiheadAttention(nn.Module):
         if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(self.d_k)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(h)
+            self.score = ALiBiPositionalEmbeddings(h, de_type)
+            self.score.max_len -= 1 
 
     def forward(self, query, key, value, diff=None, mask=None):
         "Implements Figure 2"
@@ -660,7 +661,7 @@ class MultiheadAttention(nn.Module):
                 value = self.rpe(value, diff) # [batch_size, head, len_q,  head_dim]
         if self.de_type.startswith("alibi") and diff is not None:
             # 2) Apply attention on all the projected vectors in batch.
-            x, self.attn = attention(query, key, value, score_mask=self.score.buffered_future_mask(query),
+            x, self.attn = attention(query, key, value, score_mask=self.score.buffered_future_mask_sakt(query, diff),
                                      mask=mask, dropout=self.dropout)
         else:
             # 2) Apply attention on all the projected vectors in batch.

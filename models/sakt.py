@@ -19,7 +19,8 @@ class SAKT(Module):
         embedding_size, 
         num_attn_heads, 
         dropout, 
-        de_type="none",
+        de_type="none_0",
+        choose_enc = "g",
         num_blocks=2, 
         emb_path="", 
         pretrain_dim=768
@@ -44,12 +45,13 @@ class SAKT(Module):
 
         self.de = de_type.split('_')[0]
         self.token_num = int(de_type.split('_')[1])
+        self.choose_enc = choose_enc
         
         if self.de.startswith("sde"):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
             
-        self.blocks = get_clones(Blocks(device, embedding_size, num_attn_heads, dropout, self.de), self.num_blocks)
+        self.blocks = get_clones(Blocks(device, embedding_size, num_attn_heads, dropout, de_type), self.num_blocks)
 
         self.dropout_layer = Dropout(dropout)
         self.pred = Linear(self.embedding_size, 1)
@@ -61,29 +63,31 @@ class SAKT(Module):
         posemb = self.position_emb(pos)
         if not self.de.startswith("alibi"):
             xemb = xemb + posemb
-        if self.de.startswith("sde"):
-            diffx = (self.token_num+1) + diff * (r > -1).long()
-            diffo = diff * (r > -1).int()
-            diffox = torch.where(r == 0 ,diffo, diffx)
-            demb = self.diff_emb(diffox).float()
-            xemb += demb
         return qshftemb, xemb
 
     def forward(self, feed_dict):
         q = feed_dict["skills"][:, :-1]
-        r = feed_dict["responses"][:, :-1]
         qry = feed_dict["skills"][:, 1:]
+        r = feed_dict["responses"][:, :-1]
         pos = feed_dict["position"][:, :-1]
-        diff = feed_dict["sdiff"][:, :-1]
+        diff = feed_dict["sdiff"]
 
-        if self.de.startswith("sde"):
+        if self.token_num < 1000:
             boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
             diff = torch.bucketize(diff, boundaries)
-            diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int()) 
+        else: 
+            diff = None 
             
         qshftemb, xemb = self.base_emb(q, r, qry, pos, diff)
+        enc = None
+        if self.de.startswith("sde"):
+            qshftemb += self.diff_emb(diff[:, 1:]).float()
+            xemb += self.diff_emb(diff[:, :-1]).float()
+        else:
+            enc = diff
+            
         for i in range(self.num_blocks):
-            xemb = self.blocks[i](qshftemb, xemb, xemb, diff)
+            xemb = self.blocks[i](qshftemb, xemb, xemb, enc)
 
         p = torch.sigmoid(self.pred(self.dropout_layer(xemb))).squeeze(-1)
         out_dict = {
@@ -100,11 +104,10 @@ class SAKT(Module):
         return loss , len(pred[mask]), true[mask].sum().item()
 
 class Blocks(Module):
-    def __init__(self, device, embedding_size, num_attn_heads, dropout, de="none") -> None:
+    def __init__(self, device, embedding_size, num_attn_heads, dropout, de_type="none_0") -> None:
         super().__init__()
         self.device = device
-        self.de = de
-        self.attn = MultiheadAttention(embedding_size, num_attn_heads, de_type=de, dropout=dropout)
+        self.attn = MultiheadAttention(embedding_size, num_attn_heads, de_type=de_type, dropout=dropout)
         self.attn_dropout = Dropout(dropout)
         self.attn_layer_norm = LayerNorm(embedding_size)
 
