@@ -20,7 +20,8 @@ class AKT(Module):
         embedding_size,
         num_blocks,
         kq_same,
-        de_type="none",
+        choose_enc="g",
+        de_type="none_0",
         model_type="akt",
         num_attn_heads=8,
         final_fc_dim=512,
@@ -83,6 +84,7 @@ class AKT(Module):
             
         self.de = de_type.split('_')[0]
         self.token_num = int(de_type.split('_')[1])
+        self.choose_enc = choose_enc
         
         if self.de.startswith("sde"):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
@@ -98,7 +100,8 @@ class AKT(Module):
             d_ff=self.d_ff,
             kq_same=self.kq_same,
             model_type=self.model_type,
-            de=self.de,
+            choose_enc=choose_enc,
+            de_type=de_type,
         )
 
         self.out = Sequential(
@@ -126,10 +129,13 @@ class AKT(Module):
         pid_data = feed_dict["questions"]
         diff = feed_dict["sdiff"]
         
-        if self.de.startswith("sde"):
+        if self.token_num < 1000:
             boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
             diff = torch.bucketize(diff, boundaries)
-            diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
+            diff_ox = torch.where(r==1 , diff * (r > -1).int(), (self.token_num+1) + diff * (r > -1).long())  
+        else: 
+            diff = None 
+            diff_ox = None 
 
         q_embed_data = self.q_embed(q)  # c_{c_t}: [batch_size, seq_len, embedding_size]
         if self.separate_qr:
@@ -142,28 +148,21 @@ class AKT(Module):
         if self.num_questions > 0:
             q_embed_diff_data = self.q_embed_diff(q)  # d_{c_t}: variation vector
             pid_embed_data = self.difficult_param(pid_data)  # \mu_{q_t}
-            q_embed_data = (
-                q_embed_data + pid_embed_data * q_embed_diff_data
-            )  # x_t = c_{c_t} + \mu_{q_t} + d_{c_t}
             qr_embed_diff_data = self.qr_embed_diff(qr)  # f_{(c_t, r_t)} or h_{r_t}
-
-            if self.separate_qr:
-                qr_embed_data = qr_embed_data + pid_embed_data * qr_embed_diff_data
-            else:
-                # y_t = e_{(c_t, r_t)} + \mu_{q_t} * f_{(c_t, r_t)}
-                # , where e_{(c_t, r_t)} = c_{c_t} + g_{r_t}
-                # f_{(c_t, r_t)} = f_{(c_t, r_t)} + d_{c_t}
-                # e_{(c_t, r_t)} + \mu_{q_t} * (h_{r_t} + d_{c_t})
-                if self.de.startswith("sde"):
-                    diffx = (self.token_num+1) + diff * (r > -1).long()
-                    diffo = diff * (r > -1).int()
-                    diffox = torch.where(r == 0 ,diffo, diffx)
-                    demb = self.diff_emb(diffox).float()
-                    qr_embed_data += demb
-                else:
-                    qr_embed_data = qr_embed_data + pid_embed_data * (
-                        qr_embed_diff_data + q_embed_diff_data
-                    )
+            if self.de.startswith("none"):
+                q_embed_data = (
+                    q_embed_data + pid_embed_data * q_embed_diff_data
+                )  # x_t = c_{c_t} + \mu_{q_t} + d_{c_t}
+                qr_embed_data = qr_embed_data + pid_embed_data * (
+                    qr_embed_diff_data + q_embed_diff_data
+                )
+            elif self.de.startswith("sde"):
+                if "q" in self.choose_enc:
+                    q_embed_data += self.diff_emb(diff).float()
+                if "i2" in self.choose_enc:
+                    qr_embed_data += self.diff_emb(diff_ox).float()
+                elif "i" in self.choose_enc:
+                    qr_embed_data += self.diff_emb(diff).float()
 
             c_reg_loss = torch.mean(pid_embed_data ** 2.0) * self.reg_l
         else:
@@ -230,7 +229,8 @@ class Architecture(Module):
         dropout,
         kq_same,
         model_type,
-        de="none",
+        choose_enc="g",
+        de_type="none_0",
     ):
         super().__init__()
         """
@@ -242,7 +242,8 @@ class Architecture(Module):
         self.d_model = d_model
         self.model_type = model_type
         print("model_type", model_type)
-        self.de = de
+        self.de_type = de_type
+        self.choose_enc = choose_enc
         if model_type == "akt":
             self.blocks_1 = ModuleList(
                 [
@@ -253,7 +254,7 @@ class Architecture(Module):
                         dropout=dropout,
                         n_heads=n_heads,
                         kq_same=kq_same,
-                        de_type=de,
+                        de_type=de_type,
                     )
                     for _ in range(n_blocks)
                 ]
@@ -267,7 +268,7 @@ class Architecture(Module):
                         dropout=dropout,
                         n_heads=n_heads,
                         kq_same=kq_same,
-                        de_type=de,
+                        de_type=de_type,
                     )
                     for _ in range(n_blocks * 2)
                 ]
@@ -284,6 +285,14 @@ class Architecture(Module):
         seqlen, batch_size = y.size(1), y.size(0)
         x = q_pos_embed
 
+        q_enc = None
+        i_enc = None 
+        if self.de_type.startswith("alibi"):
+            if "q" in self.choose_enc:
+                q_enc = diff
+            if "i" in self.choose_enc:
+                i_enc = diff 
+
         # encoder
         for block in self.blocks_1:  # knowledge encoder: encode (question, response)'s
             # knowledge encoder
@@ -293,14 +302,14 @@ class Architecture(Module):
             mask: 0 means that it can peek only past values.
             1 means that block can peek only current and past values
             """
-            y, _ = block(mask=1, query=y, key=y, values=y, diff=diff)
+            y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc)
         flag_first = True
         for block in self.blocks_2:
             if flag_first:  # peek current question
                 # question encoder
                 # x^{\hat}_{t} = f_{enc_1} (x_1, ..., x_t)
                 # x can see both current and past information
-                x, _ = block(mask=1, query=x, key=x, values=x, diff=diff, apply_pos=False)
+                x, _ = block(mask=1, query=x, key=x, values=x, diff=q_enc, apply_pos=False)
                 flag_first = False
             else:  # dont peek current response
                 # knoweldge retriever

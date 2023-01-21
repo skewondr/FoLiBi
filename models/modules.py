@@ -331,7 +331,7 @@ class MultiHeadAttentionWithContextDistance(Module):
         if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(n_heads)
+            self.score = ALiBiPositionalEmbeddings(n_heads, de_type)
             
         xavier_uniform_(self.gammas)
 
@@ -372,7 +372,7 @@ class MultiHeadAttentionWithContextDistance(Module):
             if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
         if self.de_type.startswith("alibi") and diff is not None:
-            scores, attn = attention(q, k, v, score_mask=self.score.buffered_future_mask(q),
+            scores, attn = attention(q, k, v, score_mask=self.score.buffered_future_mask(q, diff),
                                      mask=mask, dropout=self.dropout)
         else:
             # calculate attention using function we will define next
