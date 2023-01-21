@@ -108,11 +108,40 @@ def main(config):
     df["item_id"] += 1  # zero for padding
     num_skills = df["skill_id"].max() + 1
     num_questions = df["item_id"].max() + 1
-
+        
     print("MODEL", model_name)
     print(dataset)
     for fold, (train_ids, test_ids) in enumerate(kfold.split(users)):
         if fold >= 1 : break
+
+        train_users = users[train_ids]
+        np.random.shuffle(train_users)
+        offset = int(len(train_ids) * 0.9)
+
+        valid_users = train_users[offset:]
+        train_users = train_users[:offset]
+        test_users = users[test_ids]
+
+        df = get_diff_df(df, seq_len, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk)
+        train_df = df[df["user_id"].isin(train_users)]
+
+        token_num = int(args.de_type.split('_')[1])
+        boundaries = torch.linspace(0, 1, steps=token_num+1)                
+        train_diff_buckets = torch.bucketize(torch.Tensor(train_df['skill_diff'].to_numpy()), boundaries)
+        train_bincounts = torch.bincount(train_diff_buckets)
+
+        valid_df = df[df["user_id"].isin(valid_users)]
+        test_df = df[df["user_id"].isin(test_users)]
+        
+        train_dataset = dataset(train_df, seq_len, num_skills, num_questions, diff_df= train_df, name="train")
+        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, diff_df= train_df, name="valid")
+        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, name="test")
+
+        print("train_ids", len(train_users))
+        print("valid_ids", len(valid_users))
+        print("test_ids", len(test_users))
+
+
         if model_name == "akt":
             model_config = config.akt_config
             if data_name in ["statics", "assistments15"]:
@@ -134,7 +163,7 @@ def main(config):
             model = SAINT(device, num_skills, num_questions, seq_len, **model_config)
         elif model_name == "rdemkt":
             model_config = config.rdemkt_config
-            model = RDEMKT(device, num_skills, num_questions, seq_len, **model_config)
+            model = RDEMKT(device, num_skills, num_questions, seq_len, train_bincounts, **model_config)
             mask_prob = model_config.mask_prob
 
         dir_name = os.path.join("saved_model", model_name, data_name, params_str)
@@ -143,27 +172,6 @@ def main(config):
         with open(os.path.join(dir_name, "configs.json"), 'w') as f:
             json.dump(model_config, f)
             json.dump(train_config, f)
-
-        train_users = users[train_ids]
-        np.random.shuffle(train_users)
-        offset = int(len(train_ids) * 0.9)
-
-        valid_users = train_users[offset:]
-        train_users = train_users[:offset]
-        test_users = users[test_ids]
-
-        df = get_diff_df(df, seq_len, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk)
-        train_df = df[df["user_id"].isin(train_users)]
-        valid_df = df[df["user_id"].isin(valid_users)]
-        test_df = df[df["user_id"].isin(test_users)]
-        
-        train_dataset = dataset(train_df, seq_len, num_skills, num_questions, diff_df= train_df, name="train")
-        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, diff_df= train_df, name="valid")
-        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, name="test")
-
-        print("train_ids", len(train_users))
-        print("valid_ids", len(valid_users))
-        print("test_ids", len(test_users))
         
         print(train_config)
         print(model_config)

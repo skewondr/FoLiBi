@@ -26,11 +26,12 @@ if torch.cuda.is_available():
 from .rpe import SinusoidalPositionalEmbeddings 
 
 class RDEMKT(Module):
-    def __init__(self, device, num_skills, num_questions, seq_len, **kwargs):
+    def __init__(self, device, num_skills, num_questions, seq_len, bincounts, **kwargs):
         super(RDEMKT, self).__init__()
         self.num_skills = num_skills
         self.num_questions = num_questions
         self.seq_len = seq_len
+        self.bincounts = bincounts
         self.args = kwargs
         self.hidden_size = self.args["hidden_size"]
         self.num_blocks = self.args["num_blocks"]
@@ -70,6 +71,7 @@ class RDEMKT(Module):
                     dropout=self.dropout,
                     kq_same=self.kq_same,
                     de_type=self.de_type,
+                    bincounts=self.bincounts,
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -85,6 +87,7 @@ class RDEMKT(Module):
                     dropout=self.dropout,
                     kq_same=self.kq_same,
                     de_type=self.de_type,
+                    bincounts=self.bincounts,
                 )
                 for _ in range(self.num_blocks)
             ]

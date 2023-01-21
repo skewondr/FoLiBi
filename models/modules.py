@@ -26,7 +26,7 @@ import copy
 import pandas as pd
 
 class CL4KTTransformerLayer(Module):
-    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none_0"):
+    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none_0", bincounts=None):
         super(CL4KTTransformerLayer, self).__init__()
         """
             This is a Basic Block of Transformer paper.
@@ -36,7 +36,7 @@ class CL4KTTransformerLayer(Module):
         kq_same = kq_same == 1
         # Multi-Head Attention Block
         self.masked_attn_head = MultiHeadAttentionWithIndividualFeatures(
-            d_model, d_feature, n_heads, dropout, kq_same=kq_same, de_type=de_type
+            d_model, d_feature, n_heads, dropout, kq_same=kq_same, de_type=de_type, bincounts=bincounts
         )
 
         # Two layer norm and two dropout layers
@@ -221,7 +221,7 @@ class AKTTransformerLayer(Module):
 
 
 class MultiHeadAttentionWithIndividualFeatures(Module):
-    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none_0", bias=True):
+    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none_0", bias=True, bincounts=None):
         super(MultiHeadAttentionWithIndividualFeatures, self).__init__()
         """
         It has projection layer for getting keys, queries, and values. Followed by attention and a connected layer.
@@ -245,7 +245,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
         if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(n_heads, de_type)
+            self.score = ALiBiPositionalEmbeddings(n_heads, de_type, bincounts=bincounts)
             
         xavier_uniform_(self.gammas)
 
