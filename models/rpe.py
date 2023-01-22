@@ -341,7 +341,6 @@ class ALiBiPositionalEmbeddings(nn.Module):
                 bins = f.normalize(self.bincounts, dim=0)
             else:
                 bins = f.normalize(torch.bincount(torch.flatten(diff)).float(), dim=0)
-            bins = f.normalize(torch.bincount(torch.flatten(diff)).float(), dim =0)
             diff_freq = torch.gather(bins.repeat(tensor.shape[0], self.max_len+1, 1), -1, diff.unsqueeze(-1)).squeeze()
             x1 = (1-diff_freq[:, 1:]).unsqueeze(1).repeat(1, self.max_len, 1) #(batch_size, max_len) ->
             x2 = (1-diff_freq[:, :-1]).unsqueeze(1).repeat(1, self.max_len, 1).transpose(-1, -2).contiguous()

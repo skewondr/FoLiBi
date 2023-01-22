@@ -664,6 +664,7 @@ class MultiheadAttention(nn.Module):
             score_mask = self.score.buffered_future_mask_sakt(query, diff)
             x, self.attn = attention(query, key, value, score_mask=score_mask,
                                      mask=mask, dropout=self.dropout)
+
         else:
             # 2) Apply attention on all the projected vectors in batch.
             x, self.attn = attention(query, key, value, mask=mask,
