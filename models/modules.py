@@ -124,7 +124,7 @@ class CL4KTTransformerLayer(Module):
 
 
 class AKTTransformerLayer(Module):
-    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none_0"):
+    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none_0", bincounts=None):
         super(AKTTransformerLayer, self).__init__()
         """
             This is a Basic Block of Transformer paper.
@@ -134,8 +134,7 @@ class AKTTransformerLayer(Module):
         kq_same = kq_same == 1
         # Multi-Head Attention Block
         self.masked_attn_head = MultiHeadAttentionWithContextDistance(
-            d_model, d_feature, n_heads, dropout, kq_same=kq_same, de_type=de_type
-        )
+            d_model, d_feature, n_heads, dropout, kq_same=kq_same, de_type=de_type, bincounts=bincounts)
 
         # Two layer norm and two dropout layers
         self.layer_norm1 = LayerNorm(d_model)
@@ -306,7 +305,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
 
 
 class MultiHeadAttentionWithContextDistance(Module):
-    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none_0", bias=True):
+    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none_0", bincounts=None, bias=True):
         super(MultiHeadAttentionWithContextDistance, self).__init__()
         """
         It has projection layer for getting keys, queries, and values. Followed by attention and a connected layer.
@@ -331,7 +330,7 @@ class MultiHeadAttentionWithContextDistance(Module):
         if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(n_heads, de_type)
+            self.score = ALiBiPositionalEmbeddings(n_heads, de_type, bincounts=bincounts)
             
         xavier_uniform_(self.gammas)
 
@@ -623,7 +622,7 @@ def clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, d_model, h, dropout=0.1, de_type="none_0"):
+    def __init__(self, d_model, h, dropout=0.1, de_type="none_0", bincounts=None):
         "Take in model size and number of heads."
         super(MultiheadAttention, self).__init__()
         assert d_model % h == 0
@@ -637,7 +636,7 @@ class MultiheadAttention(nn.Module):
         if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(self.d_k)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(h, de_type)
+            self.score = ALiBiPositionalEmbeddings(h, de_type, bincounts=bincounts)
             self.score.max_len -= 1 
 
     def forward(self, query, key, value, diff=None, mask=None):
@@ -659,9 +658,11 @@ class MultiheadAttention(nn.Module):
                 key = self.rpe(key, diff) # [batch_size, head, len_k,  head_dim]
             if "v" in self.de_type :
                 value = self.rpe(value, diff) # [batch_size, head, len_q,  head_dim]
+
         if self.de_type.startswith("alibi") and diff is not None:
             # 2) Apply attention on all the projected vectors in batch.
-            x, self.attn = attention(query, key, value, score_mask=self.score.buffered_future_mask_sakt(query, diff),
+            score_mask = self.score.buffered_future_mask_sakt(query, diff)
+            x, self.attn = attention(query, key, value, score_mask=score_mask,
                                      mask=mask, dropout=self.dropout)
         else:
             # 2) Apply attention on all the projected vectors in batch.

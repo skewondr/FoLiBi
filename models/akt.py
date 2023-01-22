@@ -11,25 +11,10 @@ if torch.cuda.is_available():
 from .rpe import SinusoidalPositionalEmbeddings 
 
 class AKT(Module):
-    def __init__(
-        self,
-        device, 
-        num_skills,
-        num_questions,
-        seq_len,
-        embedding_size,
-        num_blocks,
-        kq_same,
-        choose_enc="g",
-        de_type="none_0",
-        model_type="akt",
-        num_attn_heads=8,
-        final_fc_dim=512,
-        d_ff=2048,
-        reg_l=1e-5,
-        dropout=0.2,
-        separate_qr=False,
-    ):
+    def __init__(self, device,  num_skills, num_questions, seq_len, bincounts,
+                 embedding_size, num_blocks, kq_same, choose_enc="g",
+                 de_type="none_0", model_type="akt", num_attn_heads=8,
+                 final_fc_dim=512, d_ff=2048, reg_l=1e-5, dropout=0.2, separate_qr=False):
         super(AKT, self).__init__()
 
         """
@@ -50,6 +35,7 @@ class AKT(Module):
         self.embedding_size = embedding_size
         self.num_blocks = num_blocks
         self.seq_len = seq_len
+        self.bincounts = bincounts
         self.kq_same = kq_same
         print("kq_same", kq_same)
         self.model_type = model_type
@@ -102,6 +88,7 @@ class AKT(Module):
             model_type=self.model_type,
             choose_enc=choose_enc,
             de_type=de_type,
+            bincounts=self.bincounts,
         )
 
         self.out = Sequential(
@@ -231,6 +218,7 @@ class Architecture(Module):
         model_type,
         choose_enc="g",
         de_type="none_0",
+        bincounts=None,
     ):
         super().__init__()
         """
@@ -255,6 +243,7 @@ class Architecture(Module):
                         n_heads=n_heads,
                         kq_same=kq_same,
                         de_type=de_type,
+                        bincounts=bincounts,
                     )
                     for _ in range(n_blocks)
                 ]
@@ -269,6 +258,7 @@ class Architecture(Module):
                         n_heads=n_heads,
                         kq_same=kq_same,
                         de_type=de_type,
+                        bincounts=bincounts,
                     )
                     for _ in range(n_blocks * 2)
                 ]

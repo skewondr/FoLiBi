@@ -173,14 +173,15 @@ class ALiBiPositionalEmbeddings(nn.Module):
         
         self.de = de_type.split('_')[0]
         self.token_num = int(de_type.split('_')[1])
-            
+        self.bincounts = bincounts
+
         self.slopes = torch.Tensor(self.get_slopes(attn_heads)).unsqueeze(1).unsqueeze(1) #attn_heads, 1, 1
         if "0" in self.de:
             self.alibi = self.slopes * torch.arange(max_len).unsqueeze(0).unsqueeze(0).expand(attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
         elif "2" in self.de:
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size))
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
-        elif "4" in self.de:
+        elif "4" in self.de and bincounts is not None:
             self.bincounts = bincounts.float()
 
     def get_slopes(self, n):
@@ -336,6 +337,10 @@ class ALiBiPositionalEmbeddings(nn.Module):
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         if "4" in self.de and diff is not None:
             """등장 빈도가 낮은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
+            if self.bincounts is not None:
+                bins = f.normalize(self.bincounts, dim=0)
+            else:
+                bins = f.normalize(torch.bincount(torch.flatten(diff)).float(), dim=0)
             bins = f.normalize(torch.bincount(torch.flatten(diff)).float(), dim =0)
             diff_freq = torch.gather(bins.repeat(tensor.shape[0], self.max_len+1, 1), -1, diff.unsqueeze(-1)).squeeze()
             x1 = (1-diff_freq[:, 1:]).unsqueeze(1).repeat(1, self.max_len, 1) #(batch_size, max_len) ->

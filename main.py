@@ -125,10 +125,12 @@ def main(config):
         df = get_diff_df(df, seq_len, num_skills, num_questions, total_cnt_init=config.total_cnt_init, diff_unk=config.diff_unk)
         train_df = df[df["user_id"].isin(train_users)]
 
-        token_num = int(args.de_type.split('_')[1])
-        boundaries = torch.linspace(0, 1, steps=token_num+1)                
-        train_diff_buckets = torch.bucketize(torch.Tensor(train_df['skill_diff'].to_numpy()), boundaries)
-        train_bincounts = torch.bincount(train_diff_buckets)
+        train_bincounts = None
+        if args.de_type.split('_')[0] == 'alibi4trbin':
+            token_num = int(args.de_type.split('_')[1])
+            boundaries = torch.linspace(0, 1, steps=token_num+1)                
+            train_diff_buckets = torch.bucketize(torch.Tensor(train_df['skill_diff'].to_numpy()), boundaries)
+            train_bincounts = torch.bincount(train_diff_buckets)
 
         valid_df = df[df["user_id"].isin(valid_users)]
         test_df = df[df["user_id"].isin(test_users)]
@@ -146,10 +148,10 @@ def main(config):
             model_config = config.akt_config
             if data_name in ["statics", "assistments15"]:
                 num_questions = 0
-            model = AKT(device, num_skills, num_questions, seq_len, **model_config)
+            model = AKT(device, num_skills, num_questions, seq_len, train_bincounts, **model_config)
         elif model_name == "cl4kt":
             model_config = config.cl4kt_config
-            model = CL4KT(device, num_skills, num_questions, seq_len, **model_config)
+            model = CL4KT(device, num_skills, num_questions, seq_len, train_bincounts, **model_config)
             mask_prob = model_config.mask_prob
             crop_prob = model_config.crop_prob
             permute_prob = model_config.permute_prob
@@ -157,7 +159,7 @@ def main(config):
             negative_prob = model_config.negative_prob
         elif args.model_name == "sakt":
             model_config = config.sakt_config
-            model = SAKT(device, num_skills, num_questions, seq_len, **model_config)
+            model = SAKT(device, num_skills, num_questions, seq_len, train_bincounts, **model_config)
         elif args.model_name == "saint":
             model_config = config.saint_config
             model = SAINT(device, num_skills, num_questions, seq_len, **model_config)
@@ -407,7 +409,7 @@ if __name__ == "__main__":
     parser.add_argument("--diff_unk", type=float, default=0.5, help="diff_unk")
     
     parser.add_argument("--gpu_num", type=int, required=True, help="gpu number")
-    parser.add_argument("--server_num", type=int, required=True, help="server number")
+    parser.add_argument("--server_num", type=str, required=True, help="server number")
 
     parser.add_argument("--diff_as_loss_weight", action="store_true", default=False, help="diff_as_loss_weight")
     parser.add_argument("--valid_balanced", action="store_true", default=False, help="valid_balanced")

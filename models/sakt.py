@@ -10,27 +10,16 @@ from IPython import embed
 from .rpe import SinusoidalPositionalEmbeddings 
 
 class SAKT(Module):
-    def __init__(
-        self, 
-        device, 
-        num_skills,
-        num_questions, 
-        seq_len, 
-        embedding_size, 
-        num_attn_heads, 
-        dropout, 
-        de_type="none_0",
-        choose_enc = "g",
-        num_blocks=2, 
-        emb_path="", 
-        pretrain_dim=768
-        ):
+    def __init__(self, device, num_skills,num_questions, seq_len, bincounts,
+                 embedding_size, num_attn_heads, dropout, de_type="none_0",
+                 choose_enc="g", num_blocks=2, emb_path="", pretrain_dim=768):
         super().__init__()
         self.device = device 
 
         self.num_questions = num_questions
         self.num_skills = num_skills
         self.seq_len = seq_len
+        self.bincounts = bincounts
         self.embedding_size = embedding_size
         self.num_attn_heads = num_attn_heads
         self.dropout = dropout
@@ -51,7 +40,7 @@ class SAKT(Module):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
             
-        self.blocks = get_clones(Blocks(device, embedding_size, num_attn_heads, dropout, de_type), self.num_blocks)
+        self.blocks = get_clones(Blocks(device, embedding_size, num_attn_heads, dropout, de_type, bincounts=bincounts), self.num_blocks)
 
         self.dropout_layer = Dropout(dropout)
         self.pred = Linear(self.embedding_size, 1)
@@ -104,10 +93,10 @@ class SAKT(Module):
         return loss , len(pred[mask]), true[mask].sum().item()
 
 class Blocks(Module):
-    def __init__(self, device, embedding_size, num_attn_heads, dropout, de_type="none_0") -> None:
+    def __init__(self, device, embedding_size, num_attn_heads, dropout, de_type="none_0", bincounts=None) -> None:
         super().__init__()
         self.device = device
-        self.attn = MultiheadAttention(embedding_size, num_attn_heads, de_type=de_type, dropout=dropout)
+        self.attn = MultiheadAttention(embedding_size, num_attn_heads, de_type=de_type, dropout=dropout, bincounts=bincounts)
         self.attn_dropout = Dropout(dropout)
         self.attn_layer_norm = LayerNorm(embedding_size)
 

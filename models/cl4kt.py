@@ -25,11 +25,12 @@ if torch.cuda.is_available():
 from .rpe import SinusoidalPositionalEmbeddings 
 
 class CL4KT(Module):
-    def __init__(self, device, num_skills, num_questions, seq_len, **kwargs):
+    def __init__(self, device, num_skills, num_questions, seq_len, bincounts, **kwargs):
         super(CL4KT, self).__init__()
         self.num_skills = num_skills
         self.num_questions = num_questions
         self.seq_len = seq_len
+        self.bincounts = bincounts
         self.args = kwargs
         self.hidden_size = self.args["hidden_size"]
         self.num_blocks = self.args["num_blocks"]
@@ -68,6 +69,7 @@ class CL4KT(Module):
                     dropout=self.dropout,
                     kq_same=self.kq_same,
                     de_type=self.de,
+                    bincounts=self.bincounts,
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -83,6 +85,7 @@ class CL4KT(Module):
                     dropout=self.dropout,
                     kq_same=self.kq_same,
                     de_type=self.de,
+                    bincounts=self.bincounts,
                 )
                 for _ in range(self.num_blocks)
             ]
