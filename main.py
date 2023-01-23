@@ -441,7 +441,7 @@ if __name__ == "__main__":
     
     if args.model_name == "cl4kt":
         cfg.cl4kt_config = cfg.cl4kt_config[cfg.data_name]
-        cfg.cl4kt_config.only_rp = args.only_rp
+        cfg.cl4kt_config.only_rp = 0
         cfg.cl4kt_config.choose_cl = args.choose_cl
         # cfg.cl4kt_config.reg_cl = args.reg_cl
         # cfg.cl4kt_config.mask_prob = args.mask_prob
@@ -458,7 +458,6 @@ if __name__ == "__main__":
     elif args.model_name == "rdemkt":
         cfg.rdemkt_config = cfg.rdemkt_config[cfg.data_name]
         cfg.rdemkt_config.only_rp = 1
-        cfg.rdemkt_config.choose_enc = args.choose_enc
         # cfg.mkt_config.choose_cl = args.choose_cl
         # cfg.mkt_config.inter_lambda = args.inter_lambda
         # cfg.mkt_config.ques_lambda = args.ques_lambda
