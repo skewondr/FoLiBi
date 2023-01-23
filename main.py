@@ -126,7 +126,7 @@ def main(config):
         train_df = df[df["user_id"].isin(train_users)]
 
         train_bincounts = None
-        if '4trbin' in args.de_type.split('_')[0]:
+        if '4' in args.de_type.split('_')[0]:
             token_num = int(args.de_type.split('_')[1])
             boundaries = torch.linspace(0, 1, steps=token_num+1)                
             train_diff_buckets = torch.bucketize(torch.Tensor(train_df['skill_diff'].to_numpy()), boundaries)
