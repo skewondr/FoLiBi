@@ -197,7 +197,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             return get_slopes_power_of_2(closest_power_of_2) + self.get_slopes(2*closest_power_of_2)[0::2][:n-closest_power_of_2]
         
         
-    def buffered_future_mask(self, tensor, diff=None):
+    def buffered_future_mask(self, tensor, diff=None, response=None):
         """
         !!!batch_size, attn_heads, max_len, max_len 을 만들 때, !!!
         attn_heads -> batch 순으로 repeat해나가야 함.
@@ -238,11 +238,11 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)*100 
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         if "3" in self.de and diff is not None:
-            """높은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
-            x1 = ((self.token_num+1)-diff).unsqueeze(-1).expand(-1, -1, self.max_len)
-            x2 = x1.transpose(-1, -2).contiguous()
-            x2 /= x2.norm(dim=0, keepdim=True)
+            """정답인 경우, 정답률이 낮을수록 높은 가중치. 오답인 경우, 정답률이 높을수록 높은 가중치"""
+            diff_ox = torch.where(response==1 , (self.token_num+1) - diff * (response > -1).int(), diff * (response > -1).long())  
+            x2 = diff_ox.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
             diff_effect = x2.float()
+            diff_effect /= diff_effect.norm(dim=0, keepdim=True)
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
             dist_scores = torch.where(diff_effect>(self.token_num+1)*0.5, diff_effect.double(), 0.).to(tensor.get_device())
@@ -258,8 +258,8 @@ class ALiBiPositionalEmbeddings(nn.Module):
             diff_freq = torch.gather(bins.repeat(tensor.shape[0], self.max_len, 1), -1, diff.unsqueeze(-1)).squeeze()
             x1 = (1-diff_freq).unsqueeze(-1).expand(-1, -1, self.max_len) #(batch_size, max_len) ->
             x2 = x1.transpose(-1, -2).contiguous()
-            x2 /= x2.norm(dim=0, keepdim=True)
             diff_effect = x2.float()
+            diff_effect /= diff_effect.norm(dim=0, keepdim=True)
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
             dist_scores = torch.where(diff_effect>0.5, diff_effect.double(), 0.).to(tensor.get_device())
@@ -271,7 +271,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
         _future_mask = (_future_mask / cnt_applied).to(tensor.device)
         return _future_mask[:tensor.shape[0]*self.attn_heads, :dim, :dim]
 
-    def buffered_future_mask_sakt(self, tensor, diff=None):
+    def buffered_future_mask_sakt(self, tensor, diff=None, response=None):
         """
         !!!batch_size, attn_heads, max_len, max_len 을 만들 때, !!!
         attn_heads -> batch 순으로 repeat해나가야 함.
@@ -316,9 +316,9 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)*100 
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         if "3" in self.de and diff is not None:
-            """높은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
-            x1 = ((self.token_num+1)-diff1).unsqueeze(-1).expand(-1, -1, self.max_len)
-            x2 = ((self.token_num+1)-diff2).unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
+            """정답인 경우, 정답률이 낮을수록 높은 가중치. 오답인 경우, 정답률이 높을수록 높은 가중치"""
+            diff_ox = torch.where(response==1 , (self.token_num+1) - diff2 * (response > -1).int(), diff2 * (response > -1).long())  
+            x2 = diff_ox.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
             diff_effect = x2.float()
             diff_effect /= diff_effect.norm(dim=0, keepdim=True)
             # [batch_size, 8, seqlen, seqlen] positive distance

@@ -238,10 +238,10 @@ class RDEMKT(Module):
 
         x, y = q_embed, i_embed
         for block in self.question_encoder:
-            x, _ = block(mask=1, query=x, key=x, values=x, diff=q_enc, apply_pos=True)
+            x, _ = block(mask=1, query=x, key=x, values=x, diff=q_enc, response=r, apply_pos=True)
 
         for block in self.interaction_encoder:
-            y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc, apply_pos=True)
+            y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc, response=r, apply_pos=True)
 
         for block in self.knoweldge_retriever:
             x, attn = block(mask=0, query=x, key=x, values=y, diff=None, apply_pos=True)

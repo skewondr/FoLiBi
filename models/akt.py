@@ -166,7 +166,7 @@ class AKT(Module):
         # pass to the decoder
         # output shape [batch_size, seq_len, d_model or d_model//2]
         # d_output is h_t
-        d_output, attn = self.model(q_embed_data, qr_embed_data, diff)  # 211x512
+        d_output, attn = self.model(q_embed_data, qr_embed_data, diff, r)  # 211x512
 
         concat_q = torch.cat([d_output, q_embed_data], dim=-1)  # concat([h_t, x_t])
         output = torch.sigmoid(self.out(concat_q)).squeeze()
@@ -264,7 +264,7 @@ class Architecture(Module):
                 ]
             )
 
-    def forward(self, q_embed_data, qa_embed_data, diff=None):
+    def forward(self, q_embed_data, qa_embed_data, diff=None, r=None):
         # target shape  bs, seqlen
         seqlen, batch_size = q_embed_data.size(1), q_embed_data.size(0)
 
@@ -292,14 +292,14 @@ class Architecture(Module):
             mask: 0 means that it can peek only past values.
             1 means that block can peek only current and past values
             """
-            y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc)
+            y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc, response=r)
         flag_first = True
         for block in self.blocks_2:
             if flag_first:  # peek current question
                 # question encoder
                 # x^{\hat}_{t} = f_{enc_1} (x_1, ..., x_t)
                 # x can see both current and past information
-                x, _ = block(mask=1, query=x, key=x, values=x, diff=q_enc, apply_pos=False)
+                x, _ = block(mask=1, query=x, key=x, values=x, diff=q_enc, response=r, apply_pos=False)
                 flag_first = False
             else:  # dont peek current response
                 # knoweldge retriever

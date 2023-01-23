@@ -51,7 +51,7 @@ class CL4KTTransformerLayer(Module):
         self.layer_norm2 = LayerNorm(d_model)
         self.dropout2 = Dropout(dropout)
 
-    def forward(self, mask, query, key, values, diff=None, apply_pos=True):
+    def forward(self, mask, query, key, values, diff=None, response=None, apply_pos=True):
         """
         Input:
             block: object of type BasicBlock(nn.Module). It contains maksed_attn_head objects which is of type MultiHeadAttnetion(nn.Module).
@@ -106,11 +106,11 @@ class CL4KTTransformerLayer(Module):
         bert_mask = torch.ones_like(src_mask).bool()
 
         if mask == 0:
-            query2, attn = self.masked_attn_head(query, key, values, diff=diff, mask=src_mask)
+            query2, attn = self.masked_attn_head(query, key, values, diff=diff, response=response, mask=src_mask)
         elif mask == 1:
-            query2, attn = self.masked_attn_head(query, key, values, diff=diff, mask=src_mask)
+            query2, attn = self.masked_attn_head(query, key, values, diff=diff, response=response, mask=src_mask)
         else:  # mask == 2
-            query2, attn = self.masked_attn_head(query, key, values, diff=diff, mask=bert_mask)
+            query2, attn = self.masked_attn_head(query, key, values, diff=diff, response=response, mask=bert_mask)
 
         query = query + self.dropout1((query2))  # residual connection
         query = self.layer_norm1(query)
@@ -148,7 +148,7 @@ class AKTTransformerLayer(Module):
         self.layer_norm2 = LayerNorm(d_model)
         self.dropout2 = Dropout(dropout)
 
-    def forward(self, mask, query, key, values, diff=None, apply_pos=True):
+    def forward(self, mask, query, key, values, diff=None, response=None, apply_pos=True):
         """
         Input:
             block: object of type BasicBlock(nn.Module). It contains maksed_attn_head objects which is of type MultiHeadAttnetion(nn.Module).
@@ -202,9 +202,9 @@ class AKTTransformerLayer(Module):
         src_mask = (torch.from_numpy(nopeek_mask) == 0).to(device)
 
         if mask == 0:
-            query2, attn = self.masked_attn_head(query, key, values, diff=diff, mask=src_mask)
+            query2, attn = self.masked_attn_head(query, key, values, diff=diff, response=response, mask=src_mask)
         elif mask == 1:
-            query2, attn = self.masked_attn_head(query, key, values, diff=diff, mask=src_mask)
+            query2, attn = self.masked_attn_head(query, key, values, diff=diff, response=response, mask=src_mask)
         else:  # mask == 2
             raise NotImplementedError
 
@@ -263,7 +263,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
                 constant_(self.q_linear.bias, 0.0)
             constant_(self.out_proj.bias, 0.0)
 
-    def forward(self, q, k, v, mask, diff=None):
+    def forward(self, q, k, v, mask, diff=None, response=None):
         bs = q.size(0)
 
         # perform linear operation and split into h heads
@@ -285,7 +285,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
             if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
         if self.de_type.startswith("alibi") and diff is not None:
-            scores, attn_scores = attention(q, k, v, score_mask=self.score.buffered_future_mask(q, diff),
+            scores, attn_scores = attention(q, k, v, score_mask=self.score.buffered_future_mask(q, diff, response),
                                      mask=mask, dropout=self.dropout)
         else:
             # calculate attention using function we will define next
@@ -349,7 +349,7 @@ class MultiHeadAttentionWithContextDistance(Module):
                 constant_(self.q_linear.bias, 0.0)
             constant_(self.out_proj.bias, 0.0)
 
-    def forward(self, q, k, v, mask, diff=None):
+    def forward(self, q, k, v, mask, diff=None, response=None):
         bs = q.size(0)
 
         # perform linear operation and split into h heads
@@ -371,7 +371,7 @@ class MultiHeadAttentionWithContextDistance(Module):
             if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
         if self.de_type.startswith("alibi") and diff is not None:
-            scores, attn = attention(q, k, v, score_mask=self.score.buffered_future_mask(q, diff),
+            scores, attn = attention(q, k, v, score_mask=self.score.buffered_future_mask(q, diff, response),
                                      mask=mask, dropout=self.dropout)
         else:
             # calculate attention using function we will define next
@@ -639,7 +639,7 @@ class MultiheadAttention(nn.Module):
             self.score = ALiBiPositionalEmbeddings(h, de_type, bincounts=bincounts)
             self.score.max_len -= 1 
 
-    def forward(self, query, key, value, diff=None, mask=None):
+    def forward(self, query, key, value, diff=None, response=None, mask=None):
         "Implements Figure 2"
         # if mask is not None:
         #     # Same mask applied to all h heads.
@@ -661,7 +661,7 @@ class MultiheadAttention(nn.Module):
 
         if self.de_type.startswith("alibi") and diff is not None:
             # 2) Apply attention on all the projected vectors in batch.
-            score_mask = self.score.buffered_future_mask_sakt(query, diff)
+            score_mask = self.score.buffered_future_mask_sakt(query, diff, response)
             x, self.attn = attention(query, key, value, score_mask=score_mask,
                                      mask=mask, dropout=self.dropout)
 

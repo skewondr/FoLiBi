@@ -135,8 +135,8 @@ class CL4KT(Module):
                 diff_i = torch.bucketize(diff_i, boundaries)
                 diff_j = torch.bucketize(diff_j, boundaries)
                 diff_ox = torch.where(r==1 , diff * (r > -1).int(), (self.token_num+1) + diff * (r > -1).long())  
-                i_diff_ox = torch.where(r==1 , diff_i * (r > -1).int(), (self.token_num+1) + diff_i * (r > -1).long())  
-                j_diff_ox = torch.where(r==1 , diff_j * (r > -1).int(), (self.token_num+1) + diff_j * (r > -1).long())  
+                i_diff_ox = torch.where(r==1 , diff_i * (r_i > -1).int(), (self.token_num+1) + diff_i * (r_i > -1).long())  
+                j_diff_ox = torch.where(r==1 , diff_j * (r_j > -1).int(), (self.token_num+1) + diff_j * (r_j > -1).long())  
                 neg_diff_ox = torch.where(neg_r==1 , diff * (neg_r > -1).int(), (self.token_num+1) + diff * (neg_r > -1).long())  
             else: 
                 diff, diff_i, diff_j = None, None, None  
@@ -190,6 +190,7 @@ class CL4KT(Module):
                             values=ques_i_score,
                             apply_pos=False,
                             diff=q_i_enc,
+                            response=r_i,
                         )
                         ques_j_score, _ = block(
                             mask=2,
@@ -198,6 +199,7 @@ class CL4KT(Module):
                             values=ques_j_score,
                             apply_pos=False,
                             diff=q_j_enc,
+                            response=r_j,
                         )
                 if self.choose_cl in ["s_cl", "both"]:
                     for block in self.interaction_encoder:
@@ -208,6 +210,7 @@ class CL4KT(Module):
                             values=inter_i_score,
                             apply_pos=False,
                             diff=i_i_enc,
+                            response=r_i,
                         )
                         inter_j_score, _ = block(
                             mask=2,
@@ -216,6 +219,7 @@ class CL4KT(Module):
                             values=inter_j_score,
                             apply_pos=False,
                             diff=i_j_enc,
+                            response=r_j,
                         )
                         if self.negative_prob > 0:
                             inter_k_score, _ = block(
@@ -225,6 +229,7 @@ class CL4KT(Module):
                                 values=inter_k_embed,
                                 apply_pos=False,
                                 diff=i_k_enc,
+                                response=neg_r,
                             )
                 if self.choose_cl in ["q_cl", "both"]:
                     pooled_ques_i_score = (ques_i_score * attention_mask_i.unsqueeze(-1)).sum(
@@ -321,10 +326,10 @@ class CL4KT(Module):
 
         x, y = q_embed, i_embed
         for block in self.question_encoder:
-            x, _ = block(mask=1, query=x, key=x, values=x, diff=q_enc, apply_pos=True)
+            x, _ = block(mask=1, query=x, key=x, values=x, diff=q_enc, response=r, apply_pos=True)
 
         for block in self.interaction_encoder:
-            y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc, apply_pos=True)
+            y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc, response=r, apply_pos=True)
 
         for block in self.knoweldge_retriever:
             x, attn = block(mask=0, query=x, key=x, values=y, apply_pos=True)

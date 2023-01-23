@@ -76,7 +76,7 @@ class SAKT(Module):
             enc = diff
             
         for i in range(self.num_blocks):
-            xemb = self.blocks[i](qshftemb, xemb, xemb, enc)
+            xemb = self.blocks[i](qshftemb, xemb, xemb, enc, r)
 
         p = torch.sigmoid(self.pred(self.dropout_layer(xemb))).squeeze(-1)
         out_dict = {
@@ -104,9 +104,9 @@ class Blocks(Module):
         self.FFN_dropout = Dropout(dropout)
         self.FFN_layer_norm = LayerNorm(embedding_size)
         
-    def forward(self, q=None, k=None, v=None, diff=None):
+    def forward(self, q=None, k=None, v=None, diff=None, r=None):
         causal_mask = ~ut_mask(self.device, seq_len = k.shape[1])
-        attn_emb, _ = self.attn(q, k, v, diff=diff, mask=causal_mask)
+        attn_emb, _ = self.attn(q, k, v, diff=diff, response=r, mask=causal_mask)
         attn_emb = self.attn_dropout(attn_emb)
         attn_emb = self.attn_layer_norm(q + attn_emb)
 
