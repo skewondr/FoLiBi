@@ -178,10 +178,10 @@ class ALiBiPositionalEmbeddings(nn.Module):
         self.slopes = torch.Tensor(self.get_slopes(attn_heads)).unsqueeze(1).unsqueeze(1) #attn_heads, 1, 1
         if "0" in self.de:
             self.alibi = self.slopes * torch.arange(max_len).unsqueeze(0).unsqueeze(0).expand(attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
-        elif "2" in self.de:
+        if "2" in self.de:
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size))
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
-        elif "4" in self.de and bincounts is not None:
+        if "4" in self.de and bincounts is not None:
             self.bincounts = bincounts.float()
 
     def get_slopes(self, n):
@@ -239,13 +239,10 @@ class ALiBiPositionalEmbeddings(nn.Module):
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         if "3" in self.de and diff is not None:
             """높은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
-            x1 = ((self.token_num+1)-diff).unsqueeze(1).repeat(1, self.max_len, 1)
+            x1 = ((self.token_num+1)-diff).unsqueeze(-1).expand(-1, -1, self.max_len)
             x2 = x1.transpose(-1, -2).contiguous()
-            diff_effect = (x1 + x2)/2
-            diff_effect = torch.squeeze(diff_effect[None, None, :, :].type(
-                torch.FloatTensor
-            ))  # [1, 1, seqlen, seqlen]
-            diff_effect = diff_effect.float()
+            x2 /= x2.norm(dim=0, keepdim=True)
+            diff_effect = x2.float()
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
             dist_scores = torch.where(diff_effect>(self.token_num+1)*0.5, diff_effect.double(), 0.).to(tensor.get_device())
@@ -255,17 +252,14 @@ class ALiBiPositionalEmbeddings(nn.Module):
         if "4" in self.de and diff is not None:
             """등장 빈도가 낮은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
             if self.bincounts is not None:
-                bins = f.normalize(self.bincounts, dim=0)
+                bins = (self.bincounts - torch.min(self.bincounts)) / (torch.max(self.bincounts) - torch.min(self.bincounts)) 
             else:
                 bins = f.normalize(torch.bincount(torch.flatten(diff)).float(), dim=0)
             diff_freq = torch.gather(bins.repeat(tensor.shape[0], self.max_len, 1), -1, diff.unsqueeze(-1)).squeeze()
-            x1 = (1-diff_freq).unsqueeze(1).repeat(1, self.max_len, 1) #(batch_size, max_len) ->
+            x1 = (1-diff_freq).unsqueeze(-1).expand(-1, -1, self.max_len) #(batch_size, max_len) ->
             x2 = x1.transpose(-1, -2).contiguous()
-            diff_effect = (x1 + x2)/2
-            diff_effect = torch.squeeze(diff_effect[None, None, :, :].type(
-                torch.FloatTensor
-            ))  # [1, 1, seqlen, seqlen]
-            diff_effect = diff_effect.float()
+            x2 /= x2.norm(dim=0, keepdim=True)
+            diff_effect = x2.float()
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
             dist_scores = torch.where(diff_effect>0.5, diff_effect.double(), 0.).to(tensor.get_device())
@@ -273,7 +267,8 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)*100 
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         
-        _future_mask = _future_mask.to(tensor)
+        cnt_applied = len(set('01234') & set(self.de))
+        _future_mask = (_future_mask / cnt_applied).to(tensor.device)
         return _future_mask[:tensor.shape[0]*self.attn_heads, :dim, :dim]
 
     def buffered_future_mask_sakt(self, tensor, diff=None):
@@ -322,13 +317,10 @@ class ALiBiPositionalEmbeddings(nn.Module):
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         if "3" in self.de and diff is not None:
             """높은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
-            x1 = ((self.token_num+1)-diff1).unsqueeze(1).repeat(1, self.max_len, 1)
-            x2 = ((self.token_num+1)-diff2).unsqueeze(1).repeat(1, self.max_len, 1).transpose(-1, -2).contiguous()
-            diff_effect = (x1 + x2)/2
-            diff_effect = torch.squeeze(diff_effect[None, None, :, :].type(
-                torch.FloatTensor
-            ))  # [1, 1, seqlen, seqlen]
-            diff_effect = diff_effect.float()
+            x1 = ((self.token_num+1)-diff1).unsqueeze(-1).expand(-1, -1, self.max_len)
+            x2 = ((self.token_num+1)-diff2).unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
+            diff_effect = x2.float()
+            diff_effect /= diff_effect.norm(dim=0, keepdim=True)
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
             dist_scores = torch.where(diff_effect>(self.token_num+1)*0.5, diff_effect.double(), 0.).to(tensor.get_device())
@@ -338,17 +330,14 @@ class ALiBiPositionalEmbeddings(nn.Module):
         if "4" in self.de and diff is not None:
             """등장 빈도가 낮은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
             if self.bincounts is not None:
-                bins = f.normalize(self.bincounts, dim=0)
+                bins = (self.bincounts - torch.min(self.bincounts)) / (torch.max(self.bincounts) - torch.min(self.bincounts)) 
             else:
                 bins = f.normalize(torch.bincount(torch.flatten(diff)).float(), dim=0)
             diff_freq = torch.gather(bins.repeat(tensor.shape[0], self.max_len+1, 1), -1, diff.unsqueeze(-1)).squeeze()
-            x1 = (1-diff_freq[:, 1:]).unsqueeze(1).repeat(1, self.max_len, 1) #(batch_size, max_len) ->
-            x2 = (1-diff_freq[:, :-1]).unsqueeze(1).repeat(1, self.max_len, 1).transpose(-1, -2).contiguous()
-            diff_effect = (x1 + x2)/2
-            diff_effect = torch.squeeze(diff_effect[None, None, :, :].type(
-                torch.FloatTensor
-            ))  # [1, 1, seqlen, seqlen]
-            diff_effect = diff_effect.float()
+            x1 = (1-diff_freq[:, 1:]).unsqueeze(-1).expand(-1, -1, self.max_len) #(batch_size, max_len) ->
+            x2 = (1-diff_freq[:, :-1]).unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
+            diff_effect = x2.float()
+            diff_effect /= diff_effect.norm(dim=0, keepdim=True)
             # [batch_size, 8, seqlen, seqlen] positive distance
             # dist_score => d(t, tau)
             dist_scores = torch.where(diff_effect>0.5, diff_effect.double(), 0.).to(tensor.get_device())
@@ -356,7 +345,8 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)*100 
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         
-        _future_mask = _future_mask.to(tensor)
+        cnt_applied = len(set('01234') & set(self.de))
+        _future_mask = (_future_mask / cnt_applied).to(tensor.device)
         return _future_mask[:tensor.shape[0]*self.attn_heads, :dim, :dim]
 
     def fill_with_neg_inf(self, t):
