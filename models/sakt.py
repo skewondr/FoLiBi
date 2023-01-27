@@ -52,7 +52,7 @@ class SAKT(Module):
         if self.de.startswith("sde"):
             qshftemb += self.diff_emb(diff[:, 1:]).float()
             xemb += self.diff_emb(diff[:, :-1]).float()
-        elif self.de.startswith("alibi") and not "1" in self.de:
+        elif self.de.startswith("alibi") and not "1" in self.de and len(set('12345') & set(self.de))==1:
             #alibi를 제외하면, position 정보가 들어가야 함. 
             posemb = self.position_emb(pos)
             xemb = xemb + posemb

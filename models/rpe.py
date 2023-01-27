@@ -231,7 +231,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             _scores = _scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
             _future_mask = _future_mask + _scores #batch_size, attn_heads, max_len, max_len 
         if "4" in self.de and diff is not None:
-            """동일한 concept 문제에 대하여 반복 횟수가 높을수록 (layer norm)"""
+            """동일한 concept 문제에 대하여 반복 횟수가 높을수록"""
             x1 = diff.unsqueeze(-1).expand(-1, -1, self.max_len)
             x2 = x1.transpose(-1, -2).contiguous()
             diff_effect = torch.cumsum((x1 == x2).int(), dim=-1)*(x1 == x2).int()
@@ -295,7 +295,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             _scores = _scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
             _future_mask = _future_mask + _scores #batch_size, attn_heads, max_len, max_len 
         if "4" in self.de and diff is not None:
-            """동일한 concept 문제에 대하여 반복 횟수가 높을수록 (layer norm)"""
+            """동일한 concept 문제에 대하여 반복 횟수가 높을수록"""
             x1 = diff1.unsqueeze(-1).expand(-1, -1, self.max_len)
             x2 = diff2.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
             diff_effect = torch.cumsum((x1 == x2).int(), dim=-1)*(x1 == x2).int()
