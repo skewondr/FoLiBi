@@ -86,6 +86,7 @@ def main(config):
     seq_len = train_config.seq_len
     diff_order = train_config.diff_order
     diff_as_loss_weight = train_config.diff_as_loss_weight
+    uniform = train_config.uniform
 
     if train_config.sequence_option == "recent":  # the most recent N interactions
         dataset = MostRecentQuestionSkillDataset
@@ -130,7 +131,11 @@ def main(config):
         token_num = int(args.de_type.split('_')[1])
         boundaries = np.linspace(0, 1, num=token_num+1)   
         train_quantiles = torch.Tensor([train_df['skill_diff'].quantile(i) for i in boundaries])            
-        train_diff_buckets = torch.bucketize(torch.Tensor(train_df['skill_diff'].to_numpy()), train_quantiles)
+        if uniform:
+            boundaries = torch.Tensor(boundaries)
+            train_diff_buckets = torch.bucketize(torch.Tensor(train_df['skill_diff'].to_numpy()), boundaries)
+        else:
+            train_diff_buckets = torch.bucketize(torch.Tensor(train_df['skill_diff'].to_numpy()), train_quantiles)
         train_bincounts = torch.bincount(train_diff_buckets)
 
         valid_df = df[df["user_id"].isin(valid_users)]
@@ -414,6 +419,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--diff_as_loss_weight", action="store_true", default=False, help="diff_as_loss_weight")
     parser.add_argument("--valid_balanced", action="store_true", default=False, help="valid_balanced")
+    parser.add_argument("--uniform", action="store_true", default=False, help="uniform or quantiles for difficulty")
     parser.add_argument("--seed",  type=int, default=12405, help="seed")
     
     parser.add_argument("--de_type", type=str, default="none_0", help="difficulty encoding")
@@ -435,6 +441,7 @@ if __name__ == "__main__":
     cfg.train_config.server_num = args.server_num
     cfg.train_config.diff_as_loss_weight = args.diff_as_loss_weight
     cfg.train_config.valid_balanced = args.valid_balanced
+    cfg.train_config.uniform = args.uniform
     cfg.train_config.seed = args.seed
     
     cfg.total_cnt_init = args.total_cnt_init
