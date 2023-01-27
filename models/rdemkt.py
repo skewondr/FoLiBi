@@ -53,6 +53,7 @@ class RDEMKT(Module):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), self.hidden_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
             
+        self.position_emb = Embedding(seq_len + 1, self.hidden_size, padding_idx=0)
         self.question_embed = Embedding(
             self.num_skills + 2, self.hidden_size, padding_idx=0
         )
@@ -127,36 +128,32 @@ class RDEMKT(Module):
         if self.training:
             q_i, q = batch["skills"]  # augmented q_i, augmented q_j and original q
             r_i, r = batch["responses"]  # augmented r_i, augmented r_j and original r
-            attention_mask_i, attention_mask, attention_mask_n = batch["attention_mask"]
             diff_i, diff = batch["sdiff"]
+            diff = (diff*(r>-1).int()).long()    
+            pos = batch["position"]
             
-            if self.token_num < 1000:
-                boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
-                diff = torch.bucketize(diff, boundaries)
-                diff_ox = torch.where(r==1 , diff * (r > -1).int(), (self.token_num+1) + diff * (r > -1).long())  
-            else: 
-                diff = None 
-                diff_ox = None 
-                
             if not self.only_rp:
                 ques_i_embed = self.question_embed(q_i) #original
-                inter_i_embed = self.get_interaction_embed(q, r_i, diff_i) #masked
-                q_enc = None
-                i_enc = None 
+                inter_i_embed = self.get_interaction_embed(q, r_i) #masked
                 if self.de.startswith("sde"):
                     if "q" in self.choose_enc:
                         ques_i_embed += self.diff_emb(diff).float()
-                    if "i2" in self.choose_enc:
-                        inter_i_embed += self.diff_emb(diff_ox).float()
-                    elif "i" in self.choose_enc:
+                    if "i" in self.choose_enc:
                         inter_i_embed += self.diff_emb(diff).float()
-                else:
+                # elif self.de.startswith("alibi") and not "1" in self.de:
+                #     posemb = self.position_emb(pos)
+                #     if "q" in self.choose_enc:
+                #         ques_i_embed += posemb
+                #     if "i" in self.choose_enc:
+                #         inter_i_embed += posemb
+
+                q_enc = None
+                i_enc = None
+                if self.de.startswith("alibi"):
                     if "q" in self.choose_enc:
                         q_enc = diff
                     if "i" in self.choose_enc:
                         i_enc = diff 
-                    if "i2" in self.choose_enc:
-                        i_enc = diff_ox                     
 
                 # BERT
                 if self.choose_cl in ["q_cl", "both"]:
@@ -203,38 +200,33 @@ class RDEMKT(Module):
         else:
             q = batch["skills"]  # augmented q_i, augmented q_j and original q
             r = batch["responses"]  # augmented r_i, augmented r_j and original r
-
-            attention_mask = batch["attention_mask"]
             diff = batch["sdiff"]
+            diff =(diff*(r>-1).int()).long()  
+            pos = batch["position"]
             question_mkm_loss, interaction_mkm_loss = 0, 0
             
-            if self.token_num < 1000:
-                boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
-                diff = torch.bucketize(diff, boundaries)
-                diff_ox = torch.where(r==1 , diff * (r > -1).int(), (self.token_num+1) + diff * (r > -1).long())  
-                # diff_ox = torch.where(r==0 , (diff-(self.token_num+1)) * (r > -1).int(), diff * (r > -1).int())  
-            else: 
-                diff = None 
-                diff_ox = None 
-                
         q_embed = self.question_embed(q)
-        i_embed = self.get_interaction_embed(q, r, diff)
-        q_enc = None
-        i_enc = None 
+        i_embed = self.get_interaction_embed(q, r)
+
         if self.de.startswith("sde"):
             if "q" in self.choose_enc:
                 q_embed += self.diff_emb(diff).float()
-            if "i2" in self.choose_enc:
-                i_embed += self.diff_emb(diff_ox).float()
-            elif "i" in self.choose_enc:
+            if "i" in self.choose_enc:
                 i_embed += self.diff_emb(diff).float()
-        else:
+        # elif self.de.startswith("alibi") and not "1" in self.de:
+        #     posemb = self.position_emb(pos)
+        #     if "q" in self.choose_enc:
+        #         q_embed += posemb
+        #     if "i" in self.choose_enc:
+        #         i_embed += posemb
+                
+        q_enc = None
+        i_enc = None 
+        if self.de.startswith("alibi"):
             if "q" in self.choose_enc:
                 q_enc = diff
             if "i" in self.choose_enc:
                 i_enc = diff 
-            if "i2" in self.choose_enc:
-                i_enc = diff_ox    
 
         x, y = q_embed, i_embed
         for block in self.question_encoder:
@@ -250,7 +242,7 @@ class RDEMKT(Module):
 
         output = torch.sigmoid(self.out(retrieved_knowledge)).squeeze()
         total_cl_loss = question_mkm_loss + interaction_mkm_loss
-
+        
         if self.training:
             if not self.only_rp:
                 if self.choose_cl == "q_cl":
@@ -298,10 +290,9 @@ class RDEMKT(Module):
 
         return loss, len(pred[mask]), true[mask].sum().item()
 
-    def get_interaction_embed(self, skills, responses, diff):
+    def get_interaction_embed(self, skills, responses):
         masked_responses = responses * (responses > -1).long()
         output = self.question_embed(skills) + self.answer_embed(masked_responses)
-
         return output
 
 def gelu(x):

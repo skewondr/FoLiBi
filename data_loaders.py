@@ -43,6 +43,7 @@ class SimCLRDatasetWrapper(Dataset):
         self.s_mask_id = self.num_skills + 1
         self.easier_skills = self.ds.easier_skills
         self.harder_skills = self.ds.harder_skills
+        self.diff_quantiles = self.ds.diff_quantiles
 
     def __len__(self):
         return len(self.ds)
@@ -61,6 +62,7 @@ class SimCLRDatasetWrapper(Dataset):
                 "responses": r_seq,
                 "attention_mask": attention_mask,
                 "sdiff": original_data["sdiff"],
+                "position": original_data["position"],
             }
 
         else:
@@ -138,7 +140,11 @@ class SimCLRDatasetWrapper(Dataset):
                 "attention_mask": (attention_mask_1, attention_mask_2, attention_mask),
                 "qdiff": (aug_qd_seq_1, aug_qd_seq_2, original_data["qdiff"]),
                 "sdiff": (aug_sd_seq_1, aug_sd_seq_2, original_data["sdiff"]),
+                "position": original_data["position"],
             }
+            try:
+                assert torch.max(ret["sdiff"][0]) < 11 and torch.max(ret["sdiff"][1]) < 11 and torch.max(ret["sdiff"][2]) < 11 
+            except: embed()
             return ret
 
     def __getitem__(self, index):
@@ -164,6 +170,7 @@ class MKMDatasetWrapper(Dataset):
         self.q_mask_id = self.num_questions + 1
         self.s_mask_id = self.num_skills + 1
         self.diff_order = diff_order
+        self.diff_quantiles = self.ds.diff_quantiles
 
     def __len__(self):
         return len(self.ds)
@@ -183,6 +190,7 @@ class MKMDatasetWrapper(Dataset):
                 "attention_mask": attention_mask,
                 "qdiff": original_data["qdiff"],
                 "sdiff": original_data["sdiff"],
+                "position": original_data["position"],
             }
 
         else:
@@ -228,7 +236,6 @@ class MKMDatasetWrapper(Dataset):
                 self.seq_len,
                 seed=index,
             )
-
             aug_q_seq_1, aug_s_seq_1, aug_r_seq_1, attention_mask_1, attention_mask_neg, qdiff_1, sdiff_1 = t1
             aug_q_seq_1 = torch.tensor(aug_q_seq_1, dtype=torch.long)
             aug_s_seq_1 = torch.tensor(aug_s_seq_1, dtype=torch.long)
@@ -245,7 +252,11 @@ class MKMDatasetWrapper(Dataset):
                 "attention_mask": (attention_mask_1, attention_mask, attention_mask_neg),
                 "qdiff": (aug_qd_seq_1, original_data["qdiff"]),
                 "sdiff": (aug_sd_seq_1, original_data["sdiff"]),
+                "position": original_data["position"],
             }
+            try:
+                assert torch.max(ret["sdiff"][0]) < 11 and torch.max(ret["sdiff"][1]) < 11 
+            except: embed()
             return ret
 
     def __getitem__(self, index):
@@ -309,12 +320,13 @@ def get_balanced(seq_len, objects, rm_index=None):
 
 
 class MostRecentQuestionSkillDataset(Dataset):
-    def __init__(self, df, seq_len, num_skills, num_questions, diff_df, name="train"):
+    def __init__(self, df, seq_len, num_skills, num_questions, diff_df, diff_quantiles, name="train"):
         
         self.df = df
         self.seq_len = seq_len
         self.num_skills = num_skills
         self.num_questions = num_questions
+        self.diff_quantiles = diff_quantiles
         
         self.questions, self.skills, self.responses, self.skill_diff, self.question_diff = [], [], [], [], []
         for _, u_df in self.df.groupby("user_id"):
@@ -353,6 +365,7 @@ class MostRecentQuestionSkillDataset(Dataset):
         self.qdiff_array = np.zeros(self.num_questions+1)
         self.sdiff_array[list(skill_difficulty.keys())] = np.array(list(skill_difficulty.values()))
         self.qdiff_array[list(question_difficulty.keys())] = np.array(list(question_difficulty.values()))
+        self.sdiff_array = torch.bucketize(torch.tensor(self.sdiff_array), self.diff_quantiles).cpu().detach().numpy()
 
         self.easier_skills = {}
         self.harder_skills = {}
@@ -417,6 +430,7 @@ class MostRecentQuestionSkillDataset(Dataset):
             "qdiff": self.padded_qd[index],
             "position": self.position[index],
         }
+
 
     def __len__(self):
         return self.len

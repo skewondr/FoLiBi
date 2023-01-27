@@ -139,7 +139,6 @@ def augment_kt_seqs(
     """
     skill difficulty based replace
     """
-    # print(harder_skills)
     if replace_prob > 0:
         for i, elem in enumerate(zip(masked_s_seq, masked_r_seq)):
             s, r = elem

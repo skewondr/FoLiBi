@@ -285,8 +285,15 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
             if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
         if self.de_type.startswith("alibi") and diff is not None:
-            scores, attn_scores = attention(q, k, v, score_mask=self.score.buffered_future_mask(q, diff, response),
-                                     mask=mask, dropout=self.dropout)
+            score_mask = self.score.buffered_future_mask(q, diff, response)
+            if "1" in self.de_type.split('_')[0]: #attention에 position alibi를 반영하는 경우 
+                scores, attn_scores = attention(q, k, v, score_mask=score_mask,
+                                        mask=mask, dropout=self.dropout)
+            else:
+                gammas = self.gammas
+                scores, attn_scores = individual_attention(
+                    q, k, v, self.d_k, mask, self.dropout, gammas, score_mask=score_mask
+                )
         else:
             # calculate attention using function we will define next
             gammas = self.gammas
@@ -371,8 +378,15 @@ class MultiHeadAttentionWithContextDistance(Module):
             if "v" in self.de_type :
                 v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
         if self.de_type.startswith("alibi") and diff is not None:
-            scores, attn = attention(q, k, v, score_mask=self.score.buffered_future_mask(q, diff, response),
-                                     mask=mask, dropout=self.dropout)
+            score_mask = self.score.buffered_future_mask(q, diff, response)
+            if "1" in self.de_type.split('_')[0]: #attention에 position alibi를 반영하는 경우 
+                scores, attn = attention(q, k, v, score_mask=score_mask,
+                                        mask=mask, dropout=self.dropout)
+            else:
+                gammas = self.gammas
+                scores, attn = monotonic_attention(
+                    q, k, v, self.d_k, mask, self.dropout, gammas, score_mask=score_mask
+                )
         else:
             # calculate attention using function we will define next
             gammas = self.gammas
@@ -390,13 +404,15 @@ class MultiHeadAttentionWithContextDistance(Module):
         return output, attn
 
 
-def individual_attention(q, k, v, d_k, mask, dropout, gamma=None):
+def individual_attention(q, k, v, d_k, mask, dropout, gamma=None, score_mask=None):
     """
     This is called by MultiHeadAttention object to find the values.
     """
     scores = torch.matmul(q, k.transpose(-2, -1)) / np.sqrt(
         d_k
     )  # [batch_size, 8, seq_len, seq_len]
+    if score_mask is not None:
+        scores += score_mask
     bs, head, seqlen = scores.size(0), scores.size(1), scores.size(2)
 
     x1 = torch.arange(seqlen).expand(seqlen, -1)
@@ -420,15 +436,14 @@ def individual_attention(q, k, v, d_k, mask, dropout, gamma=None):
         )
         dist_scores = dist_scores.sqrt().detach()
 
-    m = Softplus()
+        m = Softplus()
+        gamma = -1.0 * m(gamma).unsqueeze(0)
 
-    gamma = -1.0 * m(gamma).unsqueeze(0)
+        total_effect = torch.clamp(
+            torch.clamp((dist_scores * gamma).exp(), min=1e-5), max=1e5
+        )
 
-    total_effect = torch.clamp(
-        torch.clamp((dist_scores * gamma).exp(), min=1e-5), max=1e5
-    )
-
-    scores = scores * total_effect
+        scores = scores * total_effect
 
     scores.masked_fill_(mask == 0, -1e32)
     scores = F.softmax(scores, dim=-1)
@@ -439,13 +454,15 @@ def individual_attention(q, k, v, d_k, mask, dropout, gamma=None):
     return output, attn_scores
 
 
-def monotonic_attention(q, k, v, d_k, mask, dropout, gamma=None):
+def monotonic_attention(q, k, v, d_k, mask, dropout, gamma=None, score_mask=None):
     """
     This is called by MultiHeadAttention object to find the values.
     """
     scores = torch.matmul(q, k.transpose(-2, -1)) / np.sqrt(
         d_k
     )  # [batch_size, 8, seq_len, seq_len]
+    if score_mask is not None:
+        scores += score_mask
     bs, head, seqlen = scores.size(0), scores.size(1), scores.size(2)
 
     x1 = torch.arange(seqlen).expand(seqlen, -1)
@@ -487,15 +504,15 @@ def monotonic_attention(q, k, v, d_k, mask, dropout, gamma=None):
         )
         dist_scores = dist_scores.sqrt().detach()
 
-    m = Softplus()
-    # 1,8,1,1  gamma is \theta in the paper (learnable decay rate parameter)
-    gamma = -1.0 * m(gamma).unsqueeze(0)
-    # Now after do exp(gamma*distance) and then clamp to 1e-5 to 1e-5
-    total_effect = torch.clamp(
-        torch.clamp((dist_scores * gamma).exp(), min=1e-5), max=1e5
-    )
+        m = Softplus()
+        # 1,8,1,1  gamma is \theta in the paper (learnable decay rate parameter)
+        gamma = -1.0 * m(gamma).unsqueeze(0)
+        # Now after do exp(gamma*distance) and then clamp to 1e-5 to 1e-5
+        total_effect = torch.clamp(
+            torch.clamp((dist_scores * gamma).exp(), min=1e-5), max=1e5
+        )
 
-    scores = scores * total_effect
+        scores = scores * total_effect
 
     scores.masked_fill_(mask == 0, -1e32)
     scores = F.softmax(scores, dim=-1)  # [batch_size, 8, seq_len, seq_len]
@@ -636,8 +653,7 @@ class MultiheadAttention(nn.Module):
         if self.de_type in "qkv":
             self.rpe = RotaryPositionalEmbeddings(self.d_k)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(h, de_type, bincounts=bincounts)
-            self.score.max_len -= 1 
+            self.score = ALiBiPositionalEmbeddings(h, de_type, max_len=99, bincounts=bincounts)
 
     def forward(self, query, key, value, diff=None, response=None, mask=None):
         "Implements Figure 2"
@@ -662,9 +678,12 @@ class MultiheadAttention(nn.Module):
         if self.de_type.startswith("alibi") and diff is not None:
             # 2) Apply attention on all the projected vectors in batch.
             score_mask = self.score.buffered_future_mask_sakt(query, diff, response)
-            x, self.attn = attention(query, key, value, score_mask=score_mask,
-                                     mask=mask, dropout=self.dropout)
-
+            if "1" in self.de_type.split('_')[0]: #attention에 position alibi를 반영하는 경우 
+                x, self.attn = attention(query, key, value, score_mask=score_mask,
+                                        mask=mask, dropout=self.dropout)
+            else:
+                x, self.attn = attention(query, key, value, mask=mask,
+                                        dropout=self.dropout)
         else:
             # 2) Apply attention on all the projected vectors in batch.
             x, self.attn = attention(query, key, value, mask=mask,

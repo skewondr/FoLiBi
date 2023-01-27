@@ -49,8 +49,12 @@ class SAKT(Module):
         masked_responses = r * (r > -1).long()
         x = q + self.num_skills * masked_responses
         qshftemb, xemb = self.exercise_emb(qry), self.interaction_emb(x)
-        posemb = self.position_emb(pos)
-        if not self.de.startswith("alibi"):
+        if self.de.startswith("sde"):
+            qshftemb += self.diff_emb(diff[:, 1:]).float()
+            xemb += self.diff_emb(diff[:, :-1]).float()
+        elif self.de.startswith("alibi") and not "1" in self.de:
+            #alibi를 제외하면, position 정보가 들어가야 함. 
+            posemb = self.position_emb(pos)
             xemb = xemb + posemb
         return qshftemb, xemb
 
@@ -60,19 +64,11 @@ class SAKT(Module):
         r = feed_dict["responses"][:, :-1]
         pos = feed_dict["position"][:, :-1]
         diff = feed_dict["sdiff"]
+        diff = (diff*(feed_dict["responses"]>-1).int()).long()    
 
-        if self.token_num < 1000:
-            boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
-            diff = torch.bucketize(diff, boundaries)
-        else: 
-            diff = None 
-            
         qshftemb, xemb = self.base_emb(q, r, qry, pos, diff)
         enc = None
-        if self.de.startswith("sde"):
-            qshftemb += self.diff_emb(diff[:, 1:]).float()
-            xemb += self.diff_emb(diff[:, :-1]).float()
-        else:
+        if self.de.startswith("alibi"):
             enc = diff
             
         for i in range(self.num_blocks):

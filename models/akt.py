@@ -67,7 +67,7 @@ class AKT(Module):
             self.r_embed = Embedding(
                 2 + 1, self.embedding_size, padding_idx=0
             )  # e_{(c_t, r_t)} 
-            
+
         self.de = de_type.split('_')[0]
         self.token_num = int(de_type.split('_')[1])
         self.choose_enc = choose_enc
@@ -102,6 +102,7 @@ class AKT(Module):
         )
         self.reset()
         self.loss_fn = nn.BCELoss(reduction="mean")
+        self.position_emb = Embedding(seq_len + 1, embedding_size, padding_idx=0)
 
     def reset(self):
         for p in self.parameters():
@@ -115,15 +116,9 @@ class AKT(Module):
         masked_r = r * (r > -1).long()
         pid_data = feed_dict["questions"]
         diff = feed_dict["sdiff"]
+        diff = (diff*(r>-1).int()).long()    
+        pos = feed_dict["position"]
         
-        if self.token_num < 1000:
-            boundaries = torch.linspace(0, 1, steps=self.token_num+1)                
-            diff = torch.bucketize(diff, boundaries)
-            diff_ox = torch.where(r==1 , diff * (r > -1).int(), (self.token_num+1) + diff * (r > -1).long())  
-        else: 
-            diff = None 
-            diff_ox = None 
-
         q_embed_data = self.q_embed(q)  # c_{c_t}: [batch_size, seq_len, embedding_size]
         if self.separate_qr:
             qr = q + self.num_skills * masked_r
@@ -146,10 +141,14 @@ class AKT(Module):
             elif self.de.startswith("sde"):
                 if "q" in self.choose_enc:
                     q_embed_data += self.diff_emb(diff).float()
-                if "i2" in self.choose_enc:
-                    qr_embed_data += self.diff_emb(diff_ox).float()
-                elif "i" in self.choose_enc:
+                if "i" in self.choose_enc:
                     qr_embed_data += self.diff_emb(diff).float()
+            # elif self.de.startswith("alibi") and not "1" in self.de:
+            #     posemb = self.position_emb(pos)
+            #     if "q" in self.choose_enc:
+            #         q_embed_data += posemb
+            #     if "i" in self.choose_enc:
+            #         qr_embed_data += posemb
 
             c_reg_loss = torch.mean(pid_embed_data ** 2.0) * self.reg_l
         else:

@@ -176,12 +176,11 @@ class ALiBiPositionalEmbeddings(nn.Module):
         self.bincounts = bincounts
 
         self.slopes = torch.Tensor(self.get_slopes(attn_heads)).unsqueeze(1).unsqueeze(1) #attn_heads, 1, 1
-        if "0" in self.de:
-            self.alibi = self.slopes * torch.arange(max_len).unsqueeze(0).unsqueeze(0).expand(attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
-        if "2" in self.de:
+
+        if "3" in self.de:
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size))
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
-        if "4" in self.de and bincounts is not None:
+        if "5" in self.de and bincounts is not None:
             self.bincounts = bincounts.float()
 
     def get_slopes(self, n):
@@ -202,14 +201,16 @@ class ALiBiPositionalEmbeddings(nn.Module):
         !!!batch_size, attn_heads, max_len, max_len 을 만들 때, !!!
         attn_heads -> batch 순으로 repeat해나가야 함.
         """
+        # _future_mask = None
         _future_mask = torch.triu(
             self.fill_with_neg_inf(torch.zeros([self.max_len, self.max_len])), 1 #1, max_len, max_len 
         ).unsqueeze(0).unsqueeze(0) 
         dim = tensor.size(2)
-        if "0" in self.de and diff is not None:
-            """서로 먼 위치의 attention score의 영향력을 상대적으로 낮게 부여."""
-            _future_mask = _future_mask + self.alibi.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
         if "1" in self.de and diff is not None:
+            """서로 먼 위치의 attention score의 영향력을 상대적으로 낮게 부여."""
+            alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+            _future_mask = _future_mask + alibi.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
+        if "2" in self.de and diff is not None:
             """서로 비슷한 난이도의 attention score의 영향력을 상대적으로 높게 부여: 난이도 차이"""
             x1 = diff.unsqueeze(-1).expand(-1, -1, self.max_len)
             x2 = x1.transpose(-1, -2).contiguous()
@@ -224,7 +225,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
             _future_mask = _future_mask + dist_scores #batch_size*attn_heads, max_len, max_len 
-        if "2" in self.de and diff is not None:
+        if "3" in self.de and diff is not None:
             """서로 비슷한 난이도의 attention score의 영향력을 상대적으로 높게 부여: 내적값"""
             """답변에 따른 대칭적 난이도의 차가 클수록 attention score의 영향력을 상대적으로 높게 부여."""
             x1 = self.diff_emb(diff)
@@ -237,7 +238,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)*100 
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
-        if "3" in self.de and diff is not None:
+        if "4" in self.de and diff is not None:
             """정답인 경우, 정답률이 낮을수록 높은 가중치. 오답인 경우, 정답률이 높을수록 높은 가중치"""
             diff_ox = torch.where(response==1 , (self.token_num+1) - diff * (response > -1).int(), diff * (response > -1).long())  
             x2 = diff_ox.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
@@ -249,7 +250,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
-        if "4" in self.de and diff is not None:
+        if "5" in self.de and diff is not None:
             """등장 빈도가 낮은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
             if self.bincounts is not None:
                 bins = (self.bincounts - torch.min(self.bincounts)) / (torch.max(self.bincounts) - torch.min(self.bincounts)) 
@@ -267,7 +268,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)*100 
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         
-        cnt_applied = len(set('01234') & set(self.de))
+        cnt_applied = len(set('12345') & set(self.de))
         _future_mask = (_future_mask / cnt_applied).to(tensor.device)
         return _future_mask[:tensor.shape[0]*self.attn_heads, :dim, :dim]
 
@@ -282,10 +283,11 @@ class ALiBiPositionalEmbeddings(nn.Module):
             self.fill_with_neg_inf(torch.zeros([self.max_len, self.max_len])), 1 #1, max_len, max_len 
         ).unsqueeze(0).unsqueeze(0) 
         dim = tensor.size(2)
-        if "0" in self.de and diff is not None:
-            """서로 먼 위치의 attention score의 영향력을 상대적으로 낮게 부여."""
-            _future_mask = _future_mask + self.alibi[:,:,:-1].unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
         if "1" in self.de and diff is not None:
+            """서로 먼 위치의 attention score의 영향력을 상대적으로 낮게 부여."""
+            alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) 
+            _future_mask = _future_mask + alibi.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
+        if "2" in self.de and diff is not None:
             """서로 비슷한 난이도의 attention score의 영향력을 상대적으로 높게 부여: 난이도 차이"""
             x1 = diff1.unsqueeze(-1).expand(-1, -1, self.max_len)
             x2 = diff2.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
@@ -300,7 +302,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
             _future_mask = _future_mask + dist_scores #batch_size*attn_heads, max_len, max_len 
-        if "2" in self.de and diff is not None:
+        if "3" in self.de and diff is not None:
             """서로 비슷한 난이도의 attention score의 영향력을 상대적으로 높게 부여: 내적값"""
             """답변에 따른 대칭적 난이도의 차가 클수록 attention score의 영향력을 상대적으로 높게 부여."""
             x1 = self.diff_emb(diff1)
@@ -315,7 +317,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)*100 
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
-        if "3" in self.de and diff is not None:
+        if "4" in self.de and diff is not None:
             """정답인 경우, 정답률이 낮을수록 높은 가중치. 오답인 경우, 정답률이 높을수록 높은 가중치"""
             diff_ox = torch.where(response==1 , (self.token_num+1) - diff2 * (response > -1).int(), diff2 * (response > -1).long())  
             x2 = diff_ox.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
@@ -327,7 +329,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores = dist_scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
-        if "4" in self.de and diff is not None:
+        if "5" in self.de and diff is not None:
             """등장 빈도가 낮은 난이도의 attention score의 영향력을 상대적으로 높게 부여."""
             if self.bincounts is not None:
                 bins = (self.bincounts - torch.min(self.bincounts)) / (torch.max(self.bincounts) - torch.min(self.bincounts)) 
@@ -345,7 +347,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
             dist_scores *= self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)*100 
             _future_mask = _future_mask + dist_scores #batch_size, attn_heads, max_len, max_len 
         
-        cnt_applied = len(set('01234') & set(self.de))
+        cnt_applied = len(set('12345') & set(self.de))
         _future_mask = (_future_mask / cnt_applied).to(tensor.device)
         return _future_mask[:tensor.shape[0]*self.attn_heads, :dim, :dim]
 

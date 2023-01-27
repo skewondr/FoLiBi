@@ -48,7 +48,7 @@ def model_train(
                 loss, token_cnt, label_sum = model.module.loss(batch, out_dict)
             else:
                 loss, token_cnt, label_sum = model.loss(batch, out_dict)
-
+            
             accelerator.backward(loss)
 
             token_cnts += token_cnt
@@ -113,10 +113,10 @@ def model_train(
 
             total_preds_balanced = torch.cat(total_preds_balanced).squeeze(-1).detach().cpu().numpy()
             total_trues_balanced = torch.cat(total_trues_balanced).squeeze(-1).detach().cpu().numpy()
+            
 
         train_loss = np.average(train_losses)
         avg_train_losses.append(train_loss)
-
         valid_auc_balanced = roc_auc_score(y_true=total_trues_balanced, y_score=total_preds_balanced)
         valid_auc = roc_auc_score(y_true=total_trues, y_score=total_preds)
 
