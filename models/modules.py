@@ -678,12 +678,8 @@ class MultiheadAttention(nn.Module):
         if self.de_type.startswith("alibi") and diff is not None:
             # 2) Apply attention on all the projected vectors in batch.
             score_mask = self.score.buffered_future_mask_sakt(query, diff, response)
-            if "1" in self.de_type.split('_')[0]: #attention에 position alibi를 반영하는 경우 
-                x, self.attn = attention(query, key, value, score_mask=score_mask,
-                                        mask=mask, dropout=self.dropout)
-            else:
-                x, self.attn = attention(query, key, value, mask=mask,
-                                        dropout=self.dropout)
+            x, self.attn = attention(query, key, value, score_mask=score_mask,
+                                    mask=mask, dropout=self.dropout)
         else:
             # 2) Apply attention on all the projected vectors in batch.
             x, self.attn = attention(query, key, value, mask=mask,

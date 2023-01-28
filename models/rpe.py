@@ -244,7 +244,8 @@ class ALiBiPositionalEmbeddings(nn.Module):
             x1 = diff.unsqueeze(-1).expand(-1, -1, self.max_len)
             x2 = x1.transpose(-1, -2).contiguous()
             r = response.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
-            _scores = (x1 == x2).int()*(r == 1).int() #(batch, max_len, max_len)  
+            diff_effect = (x1 == x2).int()*(r == 1).int() #(batch, max_len, max_len)  
+            _scores = diff_effect * (torch.ones(self.max_len, self.max_len) - torch.eye(self.max_len, self.max_len)).unsqueeze(0)
             _scores = _scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
             _scores = _scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
             _future_mask = _future_mask + _scores #batch_size, attn_heads, max_len, max_len 
@@ -308,7 +309,8 @@ class ALiBiPositionalEmbeddings(nn.Module):
             x1 = diff1.unsqueeze(-1).expand(-1, -1, self.max_len)
             x2 = diff2.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
             r = response.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
-            _scores = (x1 == x2).int()*(r == 1).int() #(batch, max_len, max_len)  
+            diff_effect = (x1 == x2).int()*(r == 1).int() #(batch, max_len, max_len)  
+            _scores = diff_effect * (torch.ones(self.max_len, self.max_len) - torch.eye(self.max_len, self.max_len)).unsqueeze(0)
             _scores = _scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
             _scores = _scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
             _future_mask = _future_mask + _scores #batch_size, attn_heads, max_len, max_len 
