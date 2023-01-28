@@ -134,16 +134,18 @@ def main(config):
         if uniform:
             boundaries = torch.Tensor(boundaries)
             train_diff_buckets = torch.bucketize(torch.Tensor(train_df['skill_diff'].to_numpy()), boundaries)
+            diff_quantiles = boundaries
         else:
             train_diff_buckets = torch.bucketize(torch.Tensor(train_df['skill_diff'].to_numpy()), train_quantiles)
+            diff_quantiles = train_quantiles
         train_bincounts = torch.bincount(train_diff_buckets)
 
         valid_df = df[df["user_id"].isin(valid_users)]
         test_df = df[df["user_id"].isin(test_users)]
         
-        train_dataset = dataset(train_df, seq_len, num_skills, num_questions, diff_df= train_df, diff_quantiles=train_quantiles, name="train")
-        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, diff_df= train_df, diff_quantiles=train_quantiles, name="valid")
-        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, diff_quantiles=train_quantiles, name="test")
+        train_dataset = dataset(train_df, seq_len, num_skills, num_questions, diff_df= train_df, diff_quantiles=diff_quantiles, name="train")
+        valid_dataset = dataset(valid_df, seq_len, num_skills, num_questions, diff_df= train_df, diff_quantiles=diff_quantiles, name="valid")
+        test_dataset = dataset(test_df, seq_len, num_skills, num_questions, diff_df= train_df, diff_quantiles=diff_quantiles, name="test")
 
         print("train_ids", len(train_users))
         print("valid_ids", len(valid_users))
