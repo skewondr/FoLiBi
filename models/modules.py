@@ -241,7 +241,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
         self.gammas = Parameter(torch.zeros(n_heads, 1, 1))
         
         self.de_type = de_type
-        if self.de_type in "qkv":
+        if self.de_type.startswith("rotary"):
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
         if self.de_type.startswith("alibi"):
             self.score = ALiBiPositionalEmbeddings(n_heads, de_type, bincounts=bincounts)
@@ -279,11 +279,11 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
         q = q.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        if self.de_type in "qkv" and diff is not None:
+        if self.de_type.startswith("rotary") and diff is not None:
             k = self.rpe(k, diff) # [batch_size, head, len_k,  head_dim]
             q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
-            if "v" in self.de_type :
-                v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
+            # if "v" in self.de_type :
+            #     v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
         if self.de_type.startswith("alibi") and diff is not None:
             score_mask = self.score.buffered_future_mask(q, diff, response)
             if "1" in self.de_type.split('_')[0]: #attention에 position alibi를 반영하는 경우 
@@ -334,7 +334,7 @@ class MultiHeadAttentionWithContextDistance(Module):
         self.gammas = Parameter(torch.zeros(n_heads, 1, 1))
 
         self.de_type = de_type
-        if self.de_type in "qkv":
+        if self.de_type.startswith("rotary"):
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
         if self.de_type.startswith("alibi"):
             self.score = ALiBiPositionalEmbeddings(n_heads, de_type, bincounts=bincounts)
@@ -372,11 +372,11 @@ class MultiHeadAttentionWithContextDistance(Module):
         q = q.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        if self.de_type in "qkv" and diff is not None:
+        if self.de_type.startswith("rotary") and diff is not None:
             k = self.rpe(k, diff) # [batch_size, head, len_k,  head_dim]
             q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
-            if "v" in self.de_type :
-                v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
+            # if "v" in self.de_type :
+            #     v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
         if self.de_type.startswith("alibi") and diff is not None:
             score_mask = self.score.buffered_future_mask(q, diff, response)
             if "1" in self.de_type.split('_')[0]: #attention에 position alibi를 반영하는 경우 
@@ -650,7 +650,7 @@ class MultiheadAttention(nn.Module):
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
         self.de_type = de_type
-        if self.de_type in "qkv":
+        if self.de_type.startswith("rotary"):
             self.rpe = RotaryPositionalEmbeddings(self.d_k)
         if self.de_type.startswith("alibi"):
             self.score = ALiBiPositionalEmbeddings(h, de_type, max_len=99, bincounts=bincounts)
@@ -667,13 +667,11 @@ class MultiheadAttention(nn.Module):
             [l(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
              for l, x in zip(self.linears, (query, key, value))]
             
-        if self.de_type in "qkv" and diff is not None:
-            if "q" in self.de_type :
-                query = self.rpe(query, diff) # [batch_size, head, len_q,  head_dim]
-            if "k" in self.de_type :
-                key = self.rpe(key, diff) # [batch_size, head, len_k,  head_dim]
-            if "v" in self.de_type :
-                value = self.rpe(value, diff) # [batch_size, head, len_q,  head_dim]
+        if self.de_type.startswith("rotary") and diff is not None:
+            query = self.rpe(query, diff) # [batch_size, head, len_q,  head_dim]
+            key = self.rpe(key, diff) # [batch_size, head, len_k,  head_dim]
+            # if "v" in self.de_type :
+            #     value = self.rpe(value, diff) # [batch_size, head, len_q,  head_dim]
 
         if self.de_type.startswith("alibi") and diff is not None:
             # 2) Apply attention on all the projected vectors in batch.

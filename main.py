@@ -425,7 +425,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed",  type=int, default=12405, help="seed")
     
     parser.add_argument("--de_type", type=str, default="none_0", help="difficulty encoding")
-    parser.add_argument("--choose_enc", type=str, default="g", help="choose encoder")
+    parser.add_argument("--choose_enc", type=str, default="f", help="choose encoder")
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")

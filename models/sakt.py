@@ -36,7 +36,7 @@ class SAKT(Module):
         self.token_num = int(de_type.split('_')[1])
         self.choose_enc = choose_enc
         
-        if self.de.startswith("sde"):
+        if self.de.startswith(("sde", "alibi-sde")):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(self.token_num+1, embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
         elif self.de.startswith("random"):
@@ -51,7 +51,7 @@ class SAKT(Module):
         masked_responses = r * (r > -1).long()
         x = q + self.num_skills * masked_responses
         qshftemb, xemb = self.exercise_emb(qry), self.interaction_emb(x)
-        if self.de.startswith(("sde", "random")):
+        if self.de.startswith(("sde", "random", "alibi-sde")):
             qshftemb += self.diff_emb(diff[:, 1:]).float()
             xemb += self.diff_emb(diff[:, :-1]).float()
         elif self.de.startswith("alibi") and not "1" in self.de and len(set('12345') & set(self.de))==1:

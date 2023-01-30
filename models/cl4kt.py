@@ -50,7 +50,7 @@ class CL4KT(Module):
         self.de_type = self.args["de_type"]
         self.choose_enc = self.args["choose_enc"]
 
-        if self.de.startswith("sde"):
+        if self.de.startswith(("sde", "alibi-sde")):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(self.token_num+1, self.hidden_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
         elif self.de.startswith("random"):
@@ -143,7 +143,7 @@ class CL4KT(Module):
                 inter_i_embed = self.get_interaction_embed(q_i, r_i)
                 inter_j_embed = self.get_interaction_embed(q_j, r_j)
                 inter_k_embed = self.get_interaction_embed(q, neg_r)
-                if self.de.startswith(("sde", "random")):
+                if self.de.startswith(("sde", "random", "alibi-sde")):
                     if "q" in self.choose_enc:
                         ques_i_embed += self.diff_emb(diff_i).float()
                         ques_j_embed += self.diff_emb(diff_j).float()
@@ -299,7 +299,7 @@ class CL4KT(Module):
         i_embed = self.get_interaction_embed(q, r)
         f_embed = None 
 
-        if self.de.startswith(("sde", "random")):
+        if self.de.startswith(("sde", "random", "alibi-sde")):
             if "q" in self.choose_enc:
                 q_embed += self.diff_emb(diff).float()
             if "i" in self.choose_enc:

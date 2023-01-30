@@ -72,7 +72,7 @@ class AKT(Module):
         self.token_num = int(de_type.split('_')[1])
         self.choose_enc = choose_enc
         
-        if self.de.startswith("sde"):
+        if self.de.startswith(("sde", "alibi-sde")):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(self.token_num+1, embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
         elif self.de.startswith("random"):
@@ -141,7 +141,7 @@ class AKT(Module):
                 qr_embed_data = qr_embed_data + pid_embed_data * (
                     qr_embed_diff_data + q_embed_diff_data
                 )
-            elif self.de.startswith(("sde", "random")):
+            elif self.de.startswith(("sde", "random", "alibi-sde")):
                 if "q" in self.choose_enc:
                     q_embed_data += self.diff_emb(diff).float()
                 if "i" in self.choose_enc:
