@@ -104,6 +104,8 @@ class CL4KT(Module):
                     n_heads=self.num_attn_heads,
                     dropout=self.dropout,
                     kq_same=self.kq_same,
+                    de_type=self.de_type,
+                    bincounts=self.bincounts,
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -293,12 +295,15 @@ class CL4KT(Module):
             
         q_embed = self.question_embed(q)
         i_embed = self.get_interaction_embed(q, r)
+        f_embed = None 
 
         if self.de.startswith("sde"):
             if "q" in self.choose_enc:
                 q_embed += self.diff_emb(diff).float()
             if "i" in self.choose_enc:
                 i_embed += self.diff_emb(diff).float()
+            if "f" in self.choose_enc:
+                f_embed = self.diff_emb(diff).float()
         # elif self.de.startswith("alibi") and not "1" in self.de:
         #     posemb = self.position_emb(pos)
         #     if "q" in self.choose_enc:
@@ -308,12 +313,15 @@ class CL4KT(Module):
             
         q_enc = None
         i_enc = None 
+        f_enc = None 
         if self.de.startswith("alibi"):
             if "q" in self.choose_enc:
                 q_enc = diff
             if "i" in self.choose_enc:
                 i_enc = diff 
-
+            if "f" in self.choose_enc:
+                f_enc = diff 
+                
         x, y = q_embed, i_embed
         for block in self.question_encoder:
             x, _ = block(mask=1, query=x, key=x, values=x, diff=q_enc, response=r, apply_pos=True)
@@ -321,8 +329,11 @@ class CL4KT(Module):
         for block in self.interaction_encoder:
             y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc, response=r, apply_pos=True)
 
-        for block in self.knoweldge_retriever:
-            x, attn = block(mask=0, query=x, key=x, values=y, apply_pos=True)
+        for idx, block in enumerate(self.knoweldge_retriever):
+            if idx == 0 and f_embed is not None:
+                x += f_embed
+                y += f_embed
+            x, attn = block(mask=0, query=x, key=x, values=y, diff=f_enc, response=r, apply_pos=True)
 
         retrieved_knowledge = torch.cat([x, q_embed], dim=-1)
 

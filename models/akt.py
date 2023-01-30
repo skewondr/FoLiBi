@@ -119,6 +119,7 @@ class AKT(Module):
         diff = (diff*(r>-1).int()).long()    
         pos = feed_dict["position"]
         
+        f_embed=None
         q_embed_data = self.q_embed(q)  # c_{c_t}: [batch_size, seq_len, embedding_size]
         if self.separate_qr:
             qr = q + self.num_skills * masked_r
@@ -143,6 +144,8 @@ class AKT(Module):
                     q_embed_data += self.diff_emb(diff).float()
                 if "i" in self.choose_enc:
                     qr_embed_data += self.diff_emb(diff).float()
+                if "f" in self.choose_enc:
+                    f_embed = self.diff_emb(diff).float()
             # elif self.de.startswith("alibi") and not "1" in self.de:
             #     posemb = self.position_emb(pos)
             #     if "q" in self.choose_enc:
@@ -165,7 +168,7 @@ class AKT(Module):
         # pass to the decoder
         # output shape [batch_size, seq_len, d_model or d_model//2]
         # d_output is h_t
-        d_output, attn = self.model(q_embed_data, qr_embed_data, diff, r)  # 211x512
+        d_output, attn = self.model(q_embed_data, qr_embed_data, diff, r, f_embed)  # 211x512
 
         concat_q = torch.cat([d_output, q_embed_data], dim=-1)  # concat([h_t, x_t])
         output = torch.sigmoid(self.out(concat_q)).squeeze()
@@ -263,7 +266,7 @@ class Architecture(Module):
                 ]
             )
 
-    def forward(self, q_embed_data, qa_embed_data, diff=None, r=None):
+    def forward(self, q_embed_data, qa_embed_data, diff=None, r=None, f_embed=None):
         # target shape  bs, seqlen
         seqlen, batch_size = q_embed_data.size(1), q_embed_data.size(0)
 
@@ -276,11 +279,14 @@ class Architecture(Module):
 
         q_enc = None
         i_enc = None 
+        f_enc = None 
         if self.de_type.startswith("alibi"):
             if "q" in self.choose_enc:
                 q_enc = diff
             if "i" in self.choose_enc:
                 i_enc = diff 
+            if "f" in self.choose_enc:
+                f_enc = diff 
 
         # encoder
         for block in self.blocks_1:  # knowledge encoder: encode (question, response)'s
@@ -293,7 +299,7 @@ class Architecture(Module):
             """
             y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc, response=r)
         flag_first = True
-        for block in self.blocks_2:
+        for idx, block in enumerate(self.blocks_2):
             if flag_first:  # peek current question
                 # question encoder
                 # x^{\hat}_{t} = f_{enc_1} (x_1, ..., x_t)
@@ -304,6 +310,9 @@ class Architecture(Module):
                 # knoweldge retriever
                 # h_t = f_{kr} (x^{\hat}_1, ..., x^{\hat}_t, y^{\hat}_1, ..., y^{\hat}_{t-1})
                 # h can see past only
-                x, attn = block(mask=0, query=x, key=x, values=y, apply_pos=True)
+                if idx == 0 and f_embed is not None:
+                    x += f_embed
+                    y += f_embed
+                x, attn = block(mask=0, query=x, key=x, values=y, diff=f_enc, response=r, apply_pos=True)
                 flag_first = True
         return x, attn
