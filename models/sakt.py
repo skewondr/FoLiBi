@@ -37,8 +37,10 @@ class SAKT(Module):
         self.choose_enc = choose_enc
         
         if self.de.startswith("sde"):
-            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
+            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(self.token_num+1, embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
+        elif self.de.startswith("random"):
+            self.diff_emb = Embedding(self.token_num+1, embedding_size)
             
         self.blocks = get_clones(Blocks(device, embedding_size, num_attn_heads, dropout, de_type, bincounts=bincounts), self.num_blocks)
 
@@ -49,7 +51,7 @@ class SAKT(Module):
         masked_responses = r * (r > -1).long()
         x = q + self.num_skills * masked_responses
         qshftemb, xemb = self.exercise_emb(qry), self.interaction_emb(x)
-        if self.de.startswith("sde"):
+        if self.de.startswith(("sde", "random")):
             qshftemb += self.diff_emb(diff[:, 1:]).float()
             xemb += self.diff_emb(diff[:, :-1]).float()
         elif self.de.startswith("alibi") and not "1" in self.de and len(set('12345') & set(self.de))==1:

@@ -73,8 +73,10 @@ class AKT(Module):
         self.choose_enc = choose_enc
         
         if self.de.startswith("sde"):
-            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(2*(self.token_num+1), embedding_size)).to(device)
+            diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(self.token_num+1, embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
+        elif self.de.startswith("random"):
+            self.diff_emb = Embedding(self.token_num+1, embedding_size)
             
         self.model = Architecture(
             n_question=self.num_skills,
@@ -139,7 +141,7 @@ class AKT(Module):
                 qr_embed_data = qr_embed_data + pid_embed_data * (
                     qr_embed_diff_data + q_embed_diff_data
                 )
-            elif self.de.startswith("sde"):
+            elif self.de.startswith(("sde", "random")):
                 if "q" in self.choose_enc:
                     q_embed_data += self.diff_emb(diff).float()
                 if "i" in self.choose_enc:
@@ -310,7 +312,7 @@ class Architecture(Module):
                 # knoweldge retriever
                 # h_t = f_{kr} (x^{\hat}_1, ..., x^{\hat}_t, y^{\hat}_1, ..., y^{\hat}_{t-1})
                 # h can see past only
-                if idx == 0 and f_embed is not None:
+                if idx == 1 and f_embed is not None:
                     x += f_embed
                     y += f_embed
                 x, attn = block(mask=0, query=x, key=x, values=y, diff=f_enc, response=r, apply_pos=True)
