@@ -103,7 +103,7 @@ class MultiheadAttention_Shaw(nn.Module):
 #https://github.com/lucidrains/rotary-embedding-torch/blob/517ee2cfeb10602032ef9d282c19851e19dd8943/rotary_embedding_torch/rotary_embedding_torch.py#L57
 
 class RotaryPositionalEmbeddings(nn.Module):
-    def __init__(self, d, base = 10_000, device = None):
+    def __init__(self, d, max_len=100, base = 10_000, device = None):
         """
         * `d` is the number of features $d$
         * `base` is the constant used for calculating $\Theta$
@@ -114,30 +114,46 @@ class RotaryPositionalEmbeddings(nn.Module):
         self.d = d
         self.freqs = None 
         self.device = device
+        self.max_len = max_len 
         self._build_cache()
 
     def _build_cache(self):
         """
-        x: [batch, head, seq_len, head_dim]
+        x: [batch, head, max_len, head_dim]
         Cache $\cos$ and $\sin$ values
         """
-        # pos = torch.arange(seq_len).to(self.device)
-        pos = torch.tensor([1]).to(self.device)
+        pos = torch.arange(self.max_len).to(self.device)
+        # pos = torch.tensor([1]).to(self.device)
 
         # Return if cache is already built
-        if self.freqs is not None and seq_len <= self.freqs.shape[0]:
+        if self.freqs is not None and self.max_len <= self.freqs.shape[0]:
             return
         # Get sequence length
         self.freqs = 1./  (self.base **(torch.arange(0, self.d, 2)[:(self.d//2)].float().to(self.device)/self.d))
         # self.freqs = self.freqs*10**4
         #pos @ self.freqs.T
-        self.freqs = torch.einsum("..., f -> ... f", pos.type(self.freqs.dtype), self.freqs) # seq_len, dim//2 
-        #seq_len, dim//2 -> seq_len, dim
+        self.freqs = torch.einsum("..., f -> ... f", pos.type(self.freqs.dtype), self.freqs) # max_len, dim//2 
+        #max_len, dim//2 -> max_len, dim
         self.freqs = repeat(self.freqs, "... n -> ... (n r)", r=2)
         #unsqueeze
-        # self.freqs = rearrange(self.freqs, "n d -> () () n d") # 1, 1, seq_len, dim 
+        self.freqs = rearrange(self.freqs, "n d -> () () n d") # 1, 1, max_len, dim 
 
     def rotate_half(self, x):
+        """
+        In [39]: test
+        tensor([[[[0, 1, 2, 3],
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+                [0, 1, 2, 3]]]])
+
+        In [40]: self.rotate_half(test)
+        tensor([[[[-1,  0, -3,  2],
+                [-1,  0, -3,  2],
+                [-1,  0, -3,  2],
+                [-1,  0, -3,  2],
+                [-1,  0, -3,  2]]]])
+        """
         x = rearrange(x, '... (d r) -> ... d r', r = 2)
         x1, x2 = x.unbind(dim = -1)
         x = torch.stack((-x2, x1), dim = -1)
@@ -145,20 +161,20 @@ class RotaryPositionalEmbeddings(nn.Module):
 
     def forward(self, t, diff, start_index = 0):
         b, head_num, s, head_dim = t.shape
-        # t : [batch, head, seq_len, head_dim]
-        # diff : [batch, seq_len]
+        # t : [batch, head, max_len, head_dim]
+        # diff : [batch, max_len]
         # self.freqs : [max_pos, head_dim]
         self.freqs = self.freqs.to(t) # device matching
 
         diff_freqs = diff.repeat(1, head_num*head_dim).view(b, head_num, head_dim, s).transpose(2,3)
-        diff_freqs = diff_freqs*self.freqs.squeeze() #[ batch, head, seq_len, head_dim ]
+        diff_freqs = diff_freqs*self.freqs.squeeze() #[ batch, head, max_len, head_dim ]
 
         rot_dim = self.freqs.shape[-1]
         end_index = start_index + rot_dim
         assert rot_dim <= t.shape[-1], f'feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}'
         # none, t, none
         t_left, t, t_right = t[..., :start_index], t[..., start_index:end_index], t[..., end_index:]
-        t = (t * diff_freqs.cos()) + (self.rotate_half(t) * diff_freqs.sin())
+        t = (t * self.freqs.cos()) + (self.rotate_half(t) * self.freqs.sin())
         return torch.cat((t_left, t, t_right), dim = -1)
 
 class ALiBiPositionalEmbeddings(nn.Module):
@@ -188,7 +204,6 @@ class ALiBiPositionalEmbeddings(nn.Module):
         else:                                                 #some good properties that only occur when the input is a power of 2. To maintain that even
             closest_power_of_2 = 2**math.floor(math.log2(n))  #when the number of heads is not a power of 2, we use this workaround. 
             return get_slopes_power_of_2(closest_power_of_2) + self.get_slopes(2*closest_power_of_2)[0::2][:n-closest_power_of_2]
-        
         
     def buffered_future_mask(self, tensor, diff=None, response=None):
         """
