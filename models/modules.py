@@ -284,7 +284,9 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
             q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
             # if "v" in self.de_type :
             #     v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
-        if self.de_type.startswith("alibi") and diff is not None:
+            scores, attn_scores = attention(q, k, v, mask=mask, dropout=self.dropout)
+            
+        elif self.de_type.startswith("alibi") and diff is not None:
             score_mask = self.score.buffered_future_mask(q, diff, response)
             if "1" in self.de_type.split('_')[0]: #attention에 position alibi를 반영하는 경우 
                 scores, attn_scores = attention(q, k, v, score_mask=score_mask,
@@ -377,7 +379,9 @@ class MultiHeadAttentionWithContextDistance(Module):
             q = self.rpe(q, diff) # [batch_size, head, len_q,  head_dim]
             # if "v" in self.de_type :
             #     v = self.rpe(v, diff) # [batch_size, head, len_q,  head_dim]
-        if self.de_type.startswith("alibi") and diff is not None:
+            scores, attn = attention(q, k, v, mask=mask, dropout=self.dropout)
+            
+        elif self.de_type.startswith("alibi") and diff is not None:
             score_mask = self.score.buffered_future_mask(q, diff, response)
             if "1" in self.de_type.split('_')[0]: #attention에 position alibi를 반영하는 경우 
                 scores, attn = attention(q, k, v, score_mask=score_mask,
@@ -651,7 +655,7 @@ class MultiheadAttention(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
         self.de_type = de_type
         if self.de_type.startswith("rotary"):
-            self.rpe = RotaryPositionalEmbeddings(self.d_k)
+            self.rpe = RotaryPositionalEmbeddings(self.d_k, max_len=99)
         if self.de_type.startswith("alibi"):
             self.score = ALiBiPositionalEmbeddings(h, de_type, max_len=99, bincounts=bincounts)
 
@@ -668,8 +672,8 @@ class MultiheadAttention(nn.Module):
              for l, x in zip(self.linears, (query, key, value))]
             
         if self.de_type.startswith("rotary") and diff is not None:
-            query = self.rpe(query, diff) # [batch_size, head, len_q,  head_dim]
-            key = self.rpe(key, diff) # [batch_size, head, len_k,  head_dim]
+            query = self.rpe(query, diff[:, 1:]) # [batch_size, head, len_q,  head_dim]
+            key = self.rpe(key, diff[:, :-1]) # [batch_size, head, len_k,  head_dim]
             # if "v" in self.de_type :
             #     value = self.rpe(value, diff) # [batch_size, head, len_q,  head_dim]
 

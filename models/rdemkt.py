@@ -49,7 +49,7 @@ class RDEMKT(Module):
         self.de_type = self.args["de_type"]
         self.choose_enc = self.args["choose_enc"]
 
-        if self.de.startswith(("sde", "alibi-sde")):
+        if self.de.startswith(("sde", "alibi-sde", "rotary-sde")):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(self.token_num+1, self.hidden_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
         elif self.de.startswith("random"):
@@ -139,7 +139,7 @@ class RDEMKT(Module):
             if not self.only_rp:
                 ques_i_embed = self.question_embed(q_i) #original
                 inter_i_embed = self.get_interaction_embed(q, r_i) #masked
-                if self.de.startswith(("sde", "random", "alibi-sde")):
+                if self.de.startswith(("sde", "random", "alibi-sde", "rotary-sde")):
                     if "q" in self.choose_enc:
                         ques_i_embed += self.diff_emb(diff).float()
                     if "i" in self.choose_enc:
@@ -153,7 +153,7 @@ class RDEMKT(Module):
 
                 q_enc = None
                 i_enc = None
-                if self.de.startswith("alibi"):
+                if self.de.startswith(("alibi", "rotary")):
                     if "q" in self.choose_enc:
                         q_enc = diff
                     if "i" in self.choose_enc:
@@ -213,7 +213,7 @@ class RDEMKT(Module):
         i_embed = self.get_interaction_embed(q, r)
         f_embed = None 
 
-        if self.de.startswith(("sde", "random", "alibi-sde")):
+        if self.de.startswith(("sde", "random", "alibi-sde", "rotary-sde")):
             if "q" in self.choose_enc:
                 q_embed += self.diff_emb(diff).float()
             if "i" in self.choose_enc:
@@ -230,7 +230,7 @@ class RDEMKT(Module):
         q_enc = None
         i_enc = None 
         f_enc = None 
-        if self.de.startswith("alibi"):
+        if self.de.startswith("alibi", "rotary"):
             if "q" in self.choose_enc:
                 q_enc = diff
             if "i" in self.choose_enc:

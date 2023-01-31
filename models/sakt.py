@@ -36,7 +36,7 @@ class SAKT(Module):
         self.token_num = int(de_type.split('_')[1])
         self.choose_enc = choose_enc
         
-        if self.de.startswith(("sde", "alibi-sde")):
+        if self.de.startswith(("sde", "alibi-sde", "rotary-sde")):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(self.token_num+1, embedding_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
         elif self.de.startswith("random"):
@@ -51,10 +51,10 @@ class SAKT(Module):
         masked_responses = r * (r > -1).long()
         x = q + self.num_skills * masked_responses
         qshftemb, xemb = self.exercise_emb(qry), self.interaction_emb(x)
-        if self.de.startswith(("sde", "random", "alibi-sde")):
+        if self.de.startswith(("sde", "random", "alibi-sde", "rotary-sde")):
             qshftemb += self.diff_emb(diff[:, 1:]).float()
             xemb += self.diff_emb(diff[:, :-1]).float()
-        elif self.de.startswith("alibi") and not "1" in self.de and len(set('12345') & set(self.de))==1:
+        if self.de.startswith(("none", "sde", "random")):
             #alibi를 제외하면, position 정보가 들어가야 함. 
             posemb = self.position_emb(pos)
             xemb = xemb + posemb
@@ -70,7 +70,7 @@ class SAKT(Module):
 
         qshftemb, xemb = self.base_emb(q, r, qry, pos, diff)
         enc = None
-        if self.de.startswith("alibi"):
+        if self.de.startswith(("alibi", "rotary")):
             enc = diff
             
         for i in range(self.num_blocks):

@@ -50,7 +50,7 @@ class CL4KT(Module):
         self.de_type = self.args["de_type"]
         self.choose_enc = self.args["choose_enc"]
 
-        if self.de.startswith(("sde", "alibi-sde")):
+        if self.de.startswith(("sde", "alibi-sde", "rotary-sde")):
             diff_vec = torch.from_numpy(SinusoidalPositionalEmbeddings(self.token_num+1, self.hidden_size)).to(device)
             self.diff_emb = Embedding.from_pretrained(diff_vec, freeze=True)
         elif self.de.startswith("random"):
@@ -143,7 +143,7 @@ class CL4KT(Module):
                 inter_i_embed = self.get_interaction_embed(q_i, r_i)
                 inter_j_embed = self.get_interaction_embed(q_j, r_j)
                 inter_k_embed = self.get_interaction_embed(q, neg_r)
-                if self.de.startswith(("sde", "random", "alibi-sde")):
+                if self.de.startswith(("sde", "random", "alibi-sde", "rotary-sde")):
                     if "q" in self.choose_enc:
                         ques_i_embed += self.diff_emb(diff_i).float()
                         ques_j_embed += self.diff_emb(diff_j).float()
@@ -163,7 +163,7 @@ class CL4KT(Module):
                     
                 q_i_enc, q_j_enc = None, None
                 i_i_enc, i_j_enc, i_k_enc = None, None, None   
-                if self.de.startswith("alibi"):
+                if self.de.startswith(("alibi", "rotary")):
                     if "q" in self.choose_enc:
                         q_i_enc = diff_i
                         q_j_enc = diff_j
@@ -299,7 +299,7 @@ class CL4KT(Module):
         i_embed = self.get_interaction_embed(q, r)
         f_embed = None 
 
-        if self.de.startswith(("sde", "random", "alibi-sde")):
+        if self.de.startswith(("sde", "random", "alibi-sde", "rotary-sde")):
             if "q" in self.choose_enc:
                 q_embed += self.diff_emb(diff).float()
             if "i" in self.choose_enc:
@@ -316,7 +316,7 @@ class CL4KT(Module):
         q_enc = None
         i_enc = None 
         f_enc = None 
-        if self.de.startswith("alibi"):
+        if self.de.startswith(("alibi", "rotary")):
             if "q" in self.choose_enc:
                 q_enc = diff
             if "i" in self.choose_enc:
