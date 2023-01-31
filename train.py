@@ -31,7 +31,6 @@ def model_train(
 
     logs_df = pd.DataFrame()
     num_epochs = config["train_config"]["num_epochs"]
-    num_epochs = 2
     model_name = config["model_name"]
     data_name = config["data_name"]
     train_config = config["train_config"]
