@@ -124,7 +124,7 @@ class RotaryPositionalEmbeddings(nn.Module):
         x: [batch, head, max_len, head_dim]
         Cache $\cos$ and $\sin$ values
         """
-        pos = torch.tensor(list(exprange(0, self.max_len, self.max_len))).to(self.device)
+        pos = torch.tensor(list(exprange(1, self.max_len, self.max_len))).to(self.device)
         # pos = torch.arange(self.max_len).to(self.device)
         # pos = torch.tensor([1]).to(self.device)
 
@@ -220,7 +220,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
         dim = tensor.size(2)
         if "1" in self.de and diff is not None:
             """서로 먼 위치의 attention score의 영향력을 상대적으로 낮게 부여."""
-            alibi = self.slopes * torch.tensor(list(exprange(0, self.max_len, self.max_len))).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+            alibi = self.slopes * torch.tensor(list(exprange(1, self.max_len, self.max_len))).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
             # alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
             _future_mask = _future_mask + alibi.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
         if "2" in self.de and diff is not None:
@@ -286,7 +286,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
         dim = tensor.size(2)
         if "1" in self.de and diff is not None:
             """서로 먼 위치의 attention score의 영향력을 상대적으로 낮게 부여."""
-            alibi = self.slopes * torch.tensor(list(exprange(0, self.max_len, self.max_len))).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+            alibi = self.slopes * torch.tensor(list(exprange(1, self.max_len, self.max_len))).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
             # alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
             _future_mask = _future_mask + alibi.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
         if "2" in self.de and diff is not None:
