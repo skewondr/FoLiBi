@@ -420,6 +420,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--diff_as_loss_weight", action="store_true", default=False, help="diff_as_loss_weight")
     parser.add_argument("--valid_balanced", action="store_true", default=False, help="valid_balanced")
+    parser.add_argument("--exponential", action="store_true", default=True, help="exponential function for forgetting behavior")
     parser.add_argument("--uniform", action="store_true", default=False, help="uniform or quantiles for difficulty")
     parser.add_argument("--seed",  type=int, default=12405, help="seed")
     
