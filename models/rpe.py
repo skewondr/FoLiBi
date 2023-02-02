@@ -195,6 +195,13 @@ class ALiBiPositionalEmbeddings(nn.Module):
         self.bincounts = bincounts
 
         self.slopes = torch.Tensor(self.get_slopes(attn_heads)).unsqueeze(1).unsqueeze(1) #attn_heads, 1, 1
+        self.exp_alibi = list()
+        for l in range(1, self.max_len+1):
+            self.exp_alibi.append(torch.cat([torch.tensor(list(exprange(1, self.max_len+1, l))), torch.ones(self.max_len-l)], dim =-1))
+        self.alibi = torch.stack(self.exp_alibi, dim =0 )
+        self.alibi = self.slopes * self.alibi.unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+        # self.alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+        # self.alibi = self.slopes * torch.tensor(list(exprange(1, self.max_len, self.max_len))).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
 
     def get_slopes(self, n):
         """return list of lengnth n"""
@@ -220,9 +227,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
         dim = tensor.size(2)
         if "1" in self.de and diff is not None:
             """서로 먼 위치의 attention score의 영향력을 상대적으로 낮게 부여."""
-            alibi = self.slopes * torch.tensor(list(exprange(1, self.max_len, self.max_len))).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
-            # alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
-            _future_mask = _future_mask + alibi.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
+            _future_mask = _future_mask + self.alibi.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
         if "2" in self.de and diff is not None:
             """어려운 난이도의 attention score의 영향력을 상대적으로 높게 부여"""
             x1 = diff.unsqueeze(-1).expand(-1, -1, self.max_len)
@@ -286,9 +291,7 @@ class ALiBiPositionalEmbeddings(nn.Module):
         dim = tensor.size(2)
         if "1" in self.de and diff is not None:
             """서로 먼 위치의 attention score의 영향력을 상대적으로 낮게 부여."""
-            alibi = self.slopes * torch.tensor(list(exprange(1, self.max_len, self.max_len))).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
-            # alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
-            _future_mask = _future_mask + alibi.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
+            _future_mask = _future_mask + self.alibi.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
         if "2" in self.de and diff is not None:
             """어려운 난이도의 attention score의 영향력을 상대적으로 높게 부여"""
             x1 = diff1.unsqueeze(-1).expand(-1, -1, self.max_len)
