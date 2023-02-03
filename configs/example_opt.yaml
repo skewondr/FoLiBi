@@ -64,6 +64,18 @@ akt_config:
     dropout: 0.2
     reg_l: 10
     separate_qr: False
+
+  ednet: 
+    embedding_size: 64
+    num_blocks: 2
+    kq_same: True
+    model_type: "akt"
+    num_attn_heads: 8
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.2
+    reg_l: 0.01
+    separate_qr: False
   
 cl4kt_config:
   algebra05: 
@@ -133,7 +145,24 @@ cl4kt_config:
     negative_prob: 1.0
     temp: 0.05
     hard_negative_weight: 0.5
-  
+
+  ednet: 
+    hidden_size: 64
+    num_blocks: 2
+    num_attn_heads: 8
+    kq_same: True
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.2
+    reg_cl: 0.1
+    mask_prob: 0.3
+    crop_prob: 0.3
+    permute_prob: 0.9
+    replace_prob: 0.9
+    negative_prob: 1.0
+    temp: 0.05
+    hard_negative_weight: 0.1
+
 rdemkt_config:
   algebra05: 
     hidden_size: 64
@@ -192,6 +221,21 @@ rdemkt_config:
     temp: 0.05
     inter_lambda: 0.01
     ques_lambda: 1.0
+    choose_cl: "both"
+    only_rp: 1
+
+  ednet: 
+    hidden_size: 64
+    num_blocks: 2
+    num_attn_heads: 8
+    kq_same: True
+    final_fc_dim: 512
+    d_ff: 1024
+    dropout: 0.5
+    mask_prob: 0.0
+    temp: 0.05
+    inter_lambda: 0.0
+    ques_lambda: 0.0
     choose_cl: "both"
     only_rp: 1
 
