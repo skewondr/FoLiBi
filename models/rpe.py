@@ -195,13 +195,20 @@ class ALiBiPositionalEmbeddings(nn.Module):
         self.bincounts = bincounts
 
         self.slopes = torch.Tensor(self.get_slopes(attn_heads)).unsqueeze(1).unsqueeze(1) #attn_heads, 1, 1
-        self.exp_alibi = list()
-        for l in range(1, self.max_len+1):
-            self.exp_alibi.append(torch.cat([torch.tensor(list(exprange(1, self.max_len+1, l))), torch.ones(self.max_len-l)], dim =-1))
-        self.alibi = torch.stack(self.exp_alibi, dim =0 )
-        self.alibi = self.slopes * self.alibi.unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
-        # self.alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
-        # self.alibi = self.slopes * torch.tensor(list(exprange(1, self.max_len, self.max_len))).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+        if "exp" in self.de:
+            self.exp_alibi = list()
+            for l in range(1, self.max_len+1):
+                self.exp_alibi.append(torch.cat([torch.tensor(list(exprange(1, self.max_len+1, l))), torch.ones(self.max_len-l)], dim =-1))
+            self.alibi = torch.stack(self.exp_alibi, dim =0 )
+            self.alibi = self.slopes * self.alibi.unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+        elif "log" in self.de:
+            self.exp_alibi = list()
+            for l in range(1, self.max_len+1):
+                self.exp_alibi.append(torch.cat([torch.tensor(list(logrange(1, self.max_len+1, l))), torch.ones(self.max_len-l)], dim =-1))
+            self.alibi = torch.stack(self.exp_alibi, dim =0 )
+            self.alibi = self.slopes * self.alibi.unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+        else:
+            self.alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
 
     def get_slopes(self, n):
         """return list of lengnth n"""
@@ -349,8 +356,12 @@ class ALiBiPositionalEmbeddings(nn.Module):
 def frange(start, stop, numelements):
     """range function for floats"""
     incr = (stop - start) / numelements
-    return (start + x * incr for x in range(numelements))
+    return (start + x * incr for x in range(1, numelements+1))
 
 def exprange(start, stop, numelements):
     """exponential range - each element is a fixed factor bigger than the previous"""
     return (exp(x) for x in frange(log(start), log(stop), numelements))
+
+def logrange(start, stop, numelements):
+    """exponential range - each element is a fixed factor bigger than the previous"""
+    return (log(x) for x in frange(exp(start), exp(stop), numelements))
