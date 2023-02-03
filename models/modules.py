@@ -26,7 +26,7 @@ import copy
 import pandas as pd
 
 class CL4KTTransformerLayer(Module):
-    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none_0", bincounts=None):
+    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, seq_len, de_type="none_0", bincounts=None):
         super(CL4KTTransformerLayer, self).__init__()
         """
             This is a Basic Block of Transformer paper.
@@ -36,7 +36,7 @@ class CL4KTTransformerLayer(Module):
         kq_same = kq_same == 1
         # Multi-Head Attention Block
         self.masked_attn_head = MultiHeadAttentionWithIndividualFeatures(
-            d_model, d_feature, n_heads, dropout, kq_same=kq_same, de_type=de_type, bincounts=bincounts
+            d_model, d_feature, n_heads, dropout, kq_same=kq_same, seq_len=seq_len, de_type=de_type, bincounts=bincounts
         )
 
         # Two layer norm and two dropout layers
@@ -124,7 +124,7 @@ class CL4KTTransformerLayer(Module):
 
 
 class AKTTransformerLayer(Module):
-    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, de_type="none_0", bincounts=None):
+    def __init__(self, d_model, d_feature, d_ff, n_heads, dropout, kq_same, seq_len, de_type="none_0", bincounts=None):
         super(AKTTransformerLayer, self).__init__()
         """
             This is a Basic Block of Transformer paper.
@@ -134,7 +134,7 @@ class AKTTransformerLayer(Module):
         kq_same = kq_same == 1
         # Multi-Head Attention Block
         self.masked_attn_head = MultiHeadAttentionWithContextDistance(
-            d_model, d_feature, n_heads, dropout, kq_same=kq_same, de_type=de_type, bincounts=bincounts)
+            d_model, d_feature, n_heads, dropout, kq_same=kq_same, seq_len=seq_len, de_type=de_type, bincounts=bincounts)
 
         # Two layer norm and two dropout layers
         self.layer_norm1 = LayerNorm(d_model)
@@ -220,7 +220,7 @@ class AKTTransformerLayer(Module):
 
 
 class MultiHeadAttentionWithIndividualFeatures(Module):
-    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none_0", bias=True, bincounts=None):
+    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, seq_len, de_type="none_0", bias=True, bincounts=None):
         super(MultiHeadAttentionWithIndividualFeatures, self).__init__()
         """
         It has projection layer for getting keys, queries, and values. Followed by attention and a connected layer.
@@ -242,9 +242,9 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
         
         self.de_type = de_type
         if self.de_type.startswith("rotary"):
-            self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
+            self.rpe = RotaryPositionalEmbeddings(d_model // n_heads, max_len=seq_len)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(n_heads, de_type, bincounts=bincounts)
+            self.score = ALiBiPositionalEmbeddings(n_heads, de_type, bincounts=bincounts, max_len=seq_len)
             
         xavier_uniform_(self.gammas)
 
@@ -314,7 +314,7 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
 
 
 class MultiHeadAttentionWithContextDistance(Module):
-    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, de_type="none_0", bincounts=None, bias=True):
+    def __init__(self, d_model, d_feature, n_heads, dropout, kq_same, seq_len, de_type="none_0", bincounts=None, bias=True):
         super(MultiHeadAttentionWithContextDistance, self).__init__()
         """
         It has projection layer for getting keys, queries, and values. Followed by attention and a connected layer.
@@ -337,9 +337,9 @@ class MultiHeadAttentionWithContextDistance(Module):
 
         self.de_type = de_type
         if self.de_type.startswith("rotary"):
-            self.rpe = RotaryPositionalEmbeddings(d_model // n_heads)
+            self.rpe = RotaryPositionalEmbeddings(d_model // n_heads, max_len=seq_len)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(n_heads, de_type, bincounts=bincounts)
+            self.score = ALiBiPositionalEmbeddings(n_heads, de_type, bincounts=bincounts, max_len=seq_len)
             
         xavier_uniform_(self.gammas)
 
@@ -643,7 +643,7 @@ def clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, d_model, h, dropout=0.1, de_type="none_0", bincounts=None):
+    def __init__(self, d_model, h, dropout, seq_len, de_type="none_0", bincounts=None):
         "Take in model size and number of heads."
         super(MultiheadAttention, self).__init__()
         assert d_model % h == 0
@@ -655,9 +655,9 @@ class MultiheadAttention(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
         self.de_type = de_type
         if self.de_type.startswith("rotary"):
-            self.rpe = RotaryPositionalEmbeddings(self.d_k, max_len=99)
+            self.rpe = RotaryPositionalEmbeddings(self.d_k, max_len=seq_len-1)
         if self.de_type.startswith("alibi"):
-            self.score = ALiBiPositionalEmbeddings(h, de_type, max_len=99, bincounts=bincounts)
+            self.score = ALiBiPositionalEmbeddings(h, de_type, max_len=seq_len-1, bincounts=bincounts)
 
     def forward(self, query, key, value, diff=None, response=None, mask=None):
         "Implements Figure 2"

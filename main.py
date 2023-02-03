@@ -426,6 +426,8 @@ if __name__ == "__main__":
     
     parser.add_argument("--de_type", type=str, default="none_0", help="difficulty encoding")
     parser.add_argument("--choose_enc", type=str, default="f", help="choose encoder")
+    
+    parser.add_argument("--seq_len",  type=int, default=100, help="max sequence length")
     args = parser.parse_args()
 
     base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
@@ -445,6 +447,7 @@ if __name__ == "__main__":
     cfg.train_config.valid_balanced = args.valid_balanced
     cfg.train_config.uniform = args.uniform
     cfg.train_config.seed = args.seed
+    cfg.train_config.seq_len = args.seq_len
     
     cfg.total_cnt_init = args.total_cnt_init
     cfg.diff_unk = args.diff_unk

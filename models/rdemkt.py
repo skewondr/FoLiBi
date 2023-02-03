@@ -75,6 +75,7 @@ class RDEMKT(Module):
                     kq_same=self.kq_same,
                     de_type=self.de_type,
                     bincounts=self.bincounts,
+                    seq_len=seq_len,
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -91,6 +92,7 @@ class RDEMKT(Module):
                     kq_same=self.kq_same,
                     de_type=self.de_type,
                     bincounts=self.bincounts,
+                    seq_len=seq_len,
                 )
                 for _ in range(self.num_blocks)
             ]
@@ -107,6 +109,7 @@ class RDEMKT(Module):
                     kq_same=self.kq_same,
                     de_type=self.de_type,
                     bincounts=self.bincounts,
+                    seq_len=seq_len,
                 )
                 for _ in range(self.num_blocks)
             ]

@@ -88,6 +88,7 @@ class AKT(Module):
             d_ff=self.d_ff,
             kq_same=self.kq_same,
             model_type=self.model_type,
+            seq_len=seq_len,
             choose_enc=choose_enc,
             de_type=de_type,
             bincounts=self.bincounts,
@@ -220,6 +221,7 @@ class Architecture(Module):
         dropout,
         kq_same,
         model_type,
+        seq_len,
         choose_enc="g",
         de_type="none_0",
         bincounts=None,
@@ -248,6 +250,7 @@ class Architecture(Module):
                         kq_same=kq_same,
                         de_type=de_type,
                         bincounts=bincounts,
+                        seq_len=seq_len,
                     )
                     for _ in range(n_blocks)
                 ]
@@ -263,6 +266,7 @@ class Architecture(Module):
                         kq_same=kq_same,
                         de_type=de_type,
                         bincounts=bincounts,
+                        seq_len=seq_len,
                     )
                     for _ in range(n_blocks * 2)
                 ]

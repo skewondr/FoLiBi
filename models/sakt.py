@@ -42,7 +42,7 @@ class SAKT(Module):
         elif self.de.startswith("random"):
             self.diff_emb = Embedding(self.token_num+1, embedding_size)
             
-        self.blocks = get_clones(Blocks(device, embedding_size, num_attn_heads, dropout, de_type, bincounts=bincounts), self.num_blocks)
+        self.blocks = get_clones(Blocks(device, embedding_size, num_attn_heads, dropout, seq_len, de_type, bincounts=bincounts), self.num_blocks)
 
         self.dropout_layer = Dropout(dropout)
         self.pred = Linear(self.embedding_size, 1)
@@ -91,10 +91,10 @@ class SAKT(Module):
         return loss , len(pred[mask]), true[mask].sum().item()
 
 class Blocks(Module):
-    def __init__(self, device, embedding_size, num_attn_heads, dropout, de_type="none_0", bincounts=None) -> None:
+    def __init__(self, device, embedding_size, num_attn_heads, dropout, seq_len, de_type="none_0", bincounts=None) -> None:
         super().__init__()
         self.device = device
-        self.attn = MultiheadAttention(embedding_size, num_attn_heads, de_type=de_type, dropout=dropout, bincounts=bincounts)
+        self.attn = MultiheadAttention(embedding_size, num_attn_heads, dropout=dropout, seq_len=seq_len, de_type=de_type, bincounts=bincounts)
         self.attn_dropout = Dropout(dropout)
         self.attn_layer_norm = LayerNorm(embedding_size)
 
