@@ -199,6 +199,13 @@ class ALiBiPositionalEmbeddings(nn.Module):
             if "es" in self.de:
                 self.alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)
                 self.alibi = 1.1 ** self.alibi
+            elif "yj" in self.de:
+                self.exp_alibi = list()
+                for l in range(1, self.max_len+1):
+                    self.exp_alibi.append(torch.cat([torch.linspace(1, self.max_len+1, l), torch.ones(self.max_len-l)], dim =-1))
+                self.alibi = torch.stack(self.exp_alibi, dim =0 )
+                self.alibi = self.slopes * self.alibi.unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+                self.alibi = torch.exp(torch.log(self.alibi))
             else:
                 self.exp_alibi = list()
                 for l in range(1, self.max_len+1):
@@ -209,6 +216,13 @@ class ALiBiPositionalEmbeddings(nn.Module):
             if "es" in self.de:
                 self.alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)
                 self.alibi = torch.log(self.alibi + 1)
+            elif "yj" in self.de:
+                self.exp_alibi = list()
+                for l in range(1, self.max_len+1):
+                    self.exp_alibi.append(torch.cat([torch.linspace(1, self.max_len+1, l), torch.ones(self.max_len-l)], dim =-1))
+                self.alibi = torch.stack(self.exp_alibi, dim =0 )
+                self.alibi = self.slopes * self.alibi.unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)   
+                self.alibi = torch.log(torch.exp(self.alibi))
             else:    
                 self.exp_alibi = list()
                 for l in range(1, self.max_len+1):
