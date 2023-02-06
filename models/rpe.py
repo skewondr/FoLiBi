@@ -195,17 +195,25 @@ class ALiBiPositionalEmbeddings(nn.Module):
         self.bincounts = bincounts
 
         self.slopes = torch.Tensor(self.get_slopes(attn_heads)).unsqueeze(1).unsqueeze(1) #attn_heads, 1, 1
+
         if "exp" in self.de:
             if "es" in self.de:
                 self.alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)
                 self.alibi = 1.1 ** self.alibi
             elif "yj" in self.de:
-                self.exp_alibi = list()
+                torch.set_default_dtype(torch.float64)
+                exp_alibi = list()
                 for l in range(1, self.max_len+1):
-                    self.exp_alibi.append(torch.cat([torch.linspace(1, self.max_len+1, l), torch.ones(self.max_len-l)], dim =-1))
-                self.alibi = torch.stack(self.exp_alibi, dim =0 )
+                    exp_alibi.append(torch.cat([torch.linspace(1, self.max_len+1, l), torch.ones(self.max_len-l)], dim=-1))
+                alibi = torch.stack(exp_alibi, dim=0)
+                alibi = torch.exp(alibi)
+                alibi_max = torch.max(alibi)
+                alibi_min = torch.min(alibi)
+                alibi = (alibi-alibi_min)*self.max_len / (alibi_max - alibi_min)
+                # return default dtype to float32
+                torch.set_default_dtype(torch.float32)
+                self.alibi = alibi.clone().to(torch.float32)
                 self.alibi = self.slopes * self.alibi.unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
-                self.alibi = torch.exp(torch.log(self.alibi))
             else:
                 self.exp_alibi = list()
                 for l in range(1, self.max_len+1):
@@ -217,12 +225,19 @@ class ALiBiPositionalEmbeddings(nn.Module):
                 self.alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)
                 self.alibi = torch.log(self.alibi + 1)
             elif "yj" in self.de:
-                self.exp_alibi = list()
+                torch.set_default_dtype(torch.float64)
+                exp_alibi = list()
                 for l in range(1, self.max_len+1):
-                    self.exp_alibi.append(torch.cat([torch.linspace(1, self.max_len+1, l), torch.ones(self.max_len-l)], dim =-1))
-                self.alibi = torch.stack(self.exp_alibi, dim =0 )
+                    exp_alibi.append(torch.cat([torch.linspace(1, self.max_len+1, l), torch.ones(self.max_len-l)], dim=-1))
+                alibi = torch.stack(exp_alibi, dim=0)
+                alibi = torch.log(alibi)
+                alibi_max = torch.max(alibi)
+                alibi_min = torch.min(alibi)
+                alibi = (alibi-alibi_min)*(self.max_len-1) / (alibi_max - alibi_min) + 1
+                # return default dtype to float32
+                torch.set_default_dtype(torch.float32)
+                self.alibi = alibi.clone().to(torch.float32)
                 self.alibi = self.slopes * self.alibi.unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)   
-                self.alibi = torch.log(torch.exp(self.alibi))
             else:    
                 self.exp_alibi = list()
                 for l in range(1, self.max_len+1):
