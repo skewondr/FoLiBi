@@ -318,6 +318,9 @@ class Architecture(Module):
                 # knoweldge retriever
                 # h_t = f_{kr} (x^{\hat}_1, ..., x^{\hat}_t, y^{\hat}_1, ..., y^{\hat}_{t-1})
                 # h can see past only
+                if idx == 1 and f_embed is not None:
+                    x = x+f_embed
+                    y = y+f_embed
                 x, attn = block(mask=0, query=x, key=x, values=y, diff=f_enc, response=r, apply_pos=True)
                 flag_first = True
         return x, attn
