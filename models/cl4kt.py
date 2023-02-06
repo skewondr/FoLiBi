@@ -335,9 +335,9 @@ class CL4KT(Module):
             y, _ = block(mask=1, query=y, key=y, values=y, diff=i_enc, response=r, apply_pos=True)
 
         for idx, block in enumerate(self.knoweldge_retriever):
-            if idx == 0 and f_embed is not None:
-                x += f_embed
-                y += f_embed
+            if idx == len(self.knoweldge_retriever)-1 and f_embed is not None:
+                x = x+f_embed
+                y = y+f_embed
             x, attn = block(mask=0, query=x, key=x, values=y, diff=f_enc, response=r, apply_pos=True)
 
         retrieved_knowledge = torch.cat([x, q_embed], dim=-1)
