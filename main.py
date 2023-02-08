@@ -115,7 +115,7 @@ def main(config):
     print("MODEL", model_name)
     print(dataset)
     for fold, (train_ids, test_ids) in enumerate(kfold.split(users)):
-        if fold >= 3 : break
+        # if fold >= 3 : break
         train_users = users[train_ids]
         np.random.shuffle(train_users)
         offset = int(len(train_ids) * 0.9)
@@ -299,7 +299,7 @@ def main(config):
     metric_type = ['d', 'b', 'w']
     metric = ['auc', 'acc', 'rmse']
     #총 9개의 n-fold 평균 결과가 나와야 함. 
-    from IPython import embed ; embed()
+    # from IPython import embed ; embed()
     for index in range(len(test_result[0])):
         fold_total = []
         for fold in range(len(test_result)):
