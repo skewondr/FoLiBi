@@ -95,9 +95,11 @@ def main(config):
     else:
         raise NotImplementedError("sequence option is not valid")
 
-    test_aucs, test_accs, test_rmses = [], [], []
-    test_aucs_balanced, test_accs_balanced, test_rmses_balanced = [], [], []
-
+    # test_aucs, test_accs, test_rmses = [], [], []
+    # test_aucs_balanced, test_accs_balanced, test_rmses_balanced = [], [], []
+    # test_aucs_weighted, test_accs_weighted, test_rmses_weighted = [], [], []
+    test_result = []
+    
     kfold = KFold(n_splits=5, shuffle=True, random_state=seed)
 
     df = pd.read_csv(df_path, sep="\t")
@@ -113,7 +115,7 @@ def main(config):
     print("MODEL", model_name)
     print(dataset)
     for fold, (train_ids, test_ids) in enumerate(kfold.split(users)):
-        if fold >= 1 : break
+        if fold >= 3 : break
         train_users = users[train_ids]
         np.random.shuffle(train_users)
         offset = int(len(train_ids) * 0.9)
@@ -291,47 +293,19 @@ def main(config):
             n_gpu
         ) #t1 = [test_auc, test_acc, test_rmse]
 
-        test_aucs.append(t1[0])
-        test_accs.append(t1[1])
-        test_rmses.append(t1[2])
+        test_result.append(t1) # fold, 9
 
-        test_aucs_balanced.append(t1[3])
-        test_accs_balanced.append(t1[4])
-        test_rmses_balanced.append(t1[5])
-
-    test_auc = np.mean(test_aucs)
-    test_auc_std = np.std(test_aucs)
-    test_acc = np.mean(test_accs)
-    test_acc_std = np.std(test_accs)
-    test_rmse = np.mean(test_rmses)
-    test_rmse_std = np.std(test_rmses)
-
-    test_auc_balanced = np.mean(test_aucs_balanced)
-    test_aucb_std = np.std(test_aucs_balanced)
-    test_acc_balanced = np.mean(test_accs_balanced)
-    test_accb_std = np.std(test_accs_balanced)
-    test_rmse_balanced = np.mean(test_rmses_balanced)
-    test_rmseb_std = np.std(test_rmses_balanced)
-    
-    print("\n5-fold CV Result")
-    print("AUC\tACC\tRMSE")
-    print("{:.5f}\t{:.5f}\t{:.5f}".format(test_auc, test_acc, test_rmse))
-    
     print_args = dict()
-    print_args["auc"] = round(test_auc, 4)
-    print_args["auc_std"] = round(test_auc_std, 4)
-    print_args["acc"] = round(test_acc, 4)
-    print_args["acc_std"] = round(test_acc_std, 4)
-    print_args["rmse"] = round(test_rmse, 4)
-    print_args["rmse_std"] = round(test_rmse_std, 4)
+    metric_type = ['d', 'b', 'w']
+    metric = ['auc', 'acc', 'rmse']
+    #총 9개의 n-fold 평균 결과가 나와야 함. 
+    from IPython import embed ; embed()
+    for index in range(len(test_result[0])):
+        fold_total = []
+        for fold in range(len(test_result)):
+            fold_total.append(test_result[fold][index])
+        print_args[f'{metric[index%3]}_{metric_type[index//3]}'] = np.mean(fold_total)
 
-    print_args['auc_balanced'] = round(test_auc_balanced, 4)
-    print_args["auc_b_std"] = round(test_aucb_std, 4)
-    print_args['acc_balanced'] = round(test_acc_balanced, 4)
-    print_args["acc_b_std"] = round(test_accb_std, 4)
-    print_args['rmse_balanced'] = round(test_rmse_balanced, 4)
-    print_args["rmse_b_std"] = round(test_rmseb_std, 4)
-    
     if config.use_wandb:
         print_args['Model'] = model_name 
         print_args['Dataset'] = data_name 
