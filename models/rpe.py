@@ -193,22 +193,30 @@ class ALiBiPositionalEmbeddings(nn.Module):
         self.de = de_type.split('_')[0]
         self.token_num = int(de_type.split('_')[1])
         self.bincounts = bincounts
-
         self.slopes = torch.Tensor(self.get_slopes(attn_heads)).unsqueeze(1).unsqueeze(1) #attn_heads, 1, 1
         if "exp" in self.de:
-            alibi = torch.linspace(0, 1, self.max_len) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)
+            exp_alibi = list()
+            for l in range(1, self.max_len+1):
+                exp_alibi.append(torch.cat([torch.linspace(0, 1, l), torch.zeros(self.max_len-l)], dim =-1))
+            alibi = torch.stack(exp_alibi, dim =0 )
+            # alibi = torch.linspace(0, 1, self.max_len) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)
             alibi = torch.exp(alibi)
             alibi_max = torch.max(alibi)
             alibi_min = torch.min(alibi)
             alibi = (alibi-alibi_min)*self.max_len / (alibi_max - alibi_min) 
-            self.alibi = self.slopes * alibi.unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+            self.alibi = self.slopes * alibi.unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
         elif "sig" in self.de:
-            alibi = 0.1*(torch.arange(self.max_len) - 0.5*self.max_len) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)
+            exp_alibi = list()
+            for l in range(1, self.max_len+1):
+                exp_alibi.append(torch.cat([torch.linspace(1, self.max_len+1, l), torch.zeros(self.max_len-l)], dim =-1))
+            alibi = torch.stack(exp_alibi, dim =0 )
+            # alibi = 0.1*(torch.arange(self.max_len) - 0.5*self.max_len) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)
+            alibi = (alibi - 0.5*self.max_len) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)
             alibi = torch.sigmoid(alibi.float())
             alibi_max = torch.max(alibi)
             alibi_min = torch.min(alibi)
             alibi = (alibi-alibi_min)*self.max_len / (alibi_max - alibi_min) 
-            self.alibi = self.slopes * alibi.unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
+            self.alibi = self.slopes * alibi.unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len) 
         else:
             self.alibi = self.slopes * torch.arange(self.max_len).unsqueeze(0).unsqueeze(0).expand(self.attn_heads, -1, -1) #(attn_heads, 1, 1) *(attn_heads, 1, max_len)
 

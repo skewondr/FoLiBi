@@ -115,7 +115,7 @@ def main(config):
     print("MODEL", model_name)
     print(dataset)
     for fold, (train_ids, test_ids) in enumerate(kfold.split(users)):
-        # if fold >= 3 : break
+        if fold >= 1 : break
         train_users = users[train_ids]
         np.random.shuffle(train_users)
         offset = int(len(train_ids) * 0.9)
