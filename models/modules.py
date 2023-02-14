@@ -703,7 +703,7 @@ class MultiheadAttention(nn.Module):
             x, self.attn = attention(query, key, value, score_mask=score_mask,
                                     mask=mask, dropout=self.dropout)
         elif self.de_type.startswith("relative") and diff is not None:
-            x, self.attn = relative_attention(q, k, v, self.l1, self.l2, 
+            x, self.attn = relative_attention(query, key, value, self.l1, self.l2, 
                                     mask=mask, dropout=self.dropout)
         else:
             # 2) Apply attention on all the projected vectors in batch.
