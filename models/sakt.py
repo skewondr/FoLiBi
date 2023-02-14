@@ -1,7 +1,7 @@
 import torch
 
 from torch.nn import Module, Embedding, Linear, LayerNorm, Dropout, BCELoss
-from .modules import transformer_FFN, pos_encode, ut_mask, get_clones, MultiheadAttention
+from .modules import transformer_FFN, pos_encode, ut_mask, get_clones, MultiheadAttention, MultiHeadAttentionWithContextDistance
 
 if torch.cuda.is_available():
     torch.set_default_tensor_type(torch.cuda.FloatTensor)
@@ -94,7 +94,12 @@ class Blocks(Module):
     def __init__(self, device, embedding_size, num_attn_heads, dropout, seq_len, de_type="none_0", bincounts=None) -> None:
         super().__init__()
         self.device = device
-        self.attn = MultiheadAttention(embedding_size, num_attn_heads, dropout=dropout, seq_len=seq_len, de_type=de_type, bincounts=bincounts)
+        if de_type.startswith("monotonic"):
+            kq_same = False
+            self.attn = MultiHeadAttentionWithContextDistance(
+            embedding_size, embedding_size//num_attn_heads, num_attn_heads, dropout, kq_same=kq_same, seq_len=seq_len, de_type=de_type, bincounts=bincounts)
+        else:
+            self.attn = MultiheadAttention(embedding_size, num_attn_heads, dropout=dropout, seq_len=seq_len, de_type=de_type, bincounts=bincounts)
         self.attn_dropout = Dropout(dropout)
         self.attn_layer_norm = LayerNorm(embedding_size)
 

@@ -296,6 +296,9 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
                 scores, attn_scores = individual_attention(
                     q, k, v, self.d_k, mask, self.dropout, gammas, score_mask=score_mask
                 )
+        elif self.de_type.startswith("basic"):
+            scores, attn_scores = attention(q, k, v, 
+                                    mask=mask, dropout=self.dropout)
         else:
             # calculate attention using function we will define next
             gammas = self.gammas
@@ -391,6 +394,9 @@ class MultiHeadAttentionWithContextDistance(Module):
                 scores, attn = monotonic_attention(
                     q, k, v, self.d_k, mask, self.dropout, gammas, score_mask=score_mask
                 )
+        elif self.de_type.startswith("basic"):
+            scores, attn = attention(q, k, v, 
+                                    mask=mask, dropout=self.dropout)
         else:
             # calculate attention using function we will define next
             gammas = self.gammas
@@ -677,7 +683,7 @@ class MultiheadAttention(nn.Module):
             # if "v" in self.de_type :
             #     value = self.rpe(value, diff) # [batch_size, head, len_q,  head_dim]
 
-        if self.de_type.startswith("alibi") and diff is not None:
+        elif self.de_type.startswith("alibi") and diff is not None:
             # 2) Apply attention on all the projected vectors in batch.
             score_mask = self.score.buffered_future_mask_sakt(query, diff, response)
             x, self.attn = attention(query, key, value, score_mask=score_mask,

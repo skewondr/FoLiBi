@@ -169,8 +169,8 @@ class RotaryPositionalEmbeddings(nn.Module):
         # self.freqs : [max_pos, head_dim]
         self.freqs = self.freqs.to(t) # device matching
 
-        diff_freqs = diff.repeat(1, head_num*head_dim).view(b, head_num, head_dim, s).transpose(2,3)
-        diff_freqs = diff_freqs*self.freqs.squeeze() #[ batch, head, max_len, head_dim ]
+        # diff_freqs = diff.repeat(1, head_num*head_dim).view(b, head_num, head_dim, s).transpose(2,3)
+        # diff_freqs = diff_freqs*self.freqs.squeeze() #[ batch, head, max_len, head_dim ]
 
         rot_dim = self.freqs.shape[-1]
         end_index = start_index + rot_dim
