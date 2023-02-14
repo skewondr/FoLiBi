@@ -166,7 +166,7 @@ class CL4KT(Module):
                     
                 q_i_enc, q_j_enc = None, None
                 i_i_enc, i_j_enc, i_k_enc = None, None, None   
-                if self.de.startswith(("alibi", "rotary")):
+                if self.de.startswith(("alibi", "rotary", "basic", "relative")):
                     if "q" in self.choose_enc:
                         q_i_enc = diff_i
                         q_j_enc = diff_j
@@ -319,7 +319,7 @@ class CL4KT(Module):
         q_enc = None
         i_enc = None 
         f_enc = None 
-        if self.de.startswith(("alibi", "rotary")):
+        if self.de.startswith(("alibi", "rotary", "basic", "relative")):
             if "q" in self.choose_enc:
                 q_enc = diff
             if "i" in self.choose_enc:

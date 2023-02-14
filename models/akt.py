@@ -286,7 +286,7 @@ class Architecture(Module):
         q_enc = None
         i_enc = None 
         f_enc = None 
-        if self.de_type.startswith(("alibi", "rotary")):
+        if self.de_type.startswith(("alibi", "rotary", "basic", "relative")):
             if "q" in self.choose_enc:
                 q_enc = diff
             if "i" in self.choose_enc:

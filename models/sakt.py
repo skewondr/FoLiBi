@@ -70,7 +70,7 @@ class SAKT(Module):
 
         qshftemb, xemb = self.base_emb(q, r, qry, pos, diff)
         enc = None
-        if self.de.startswith(("alibi", "rotary")):
+        if self.de.startswith(("alibi", "rotary", "basic", "relative")):
             enc = diff
             
         for i in range(self.num_blocks):

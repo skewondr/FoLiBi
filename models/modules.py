@@ -245,6 +245,9 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads, max_len=seq_len)
         if self.de_type.startswith("alibi"):
             self.score = ALiBiPositionalEmbeddings(n_heads, de_type, bincounts=bincounts, max_len=seq_len)
+        if self.de_type.startswith("relative"):
+            self.l1 = Parameter(torch.rand(1))
+            self.l2 = Parameter(torch.rand(1))
             
         xavier_uniform_(self.gammas)
 
@@ -296,8 +299,11 @@ class MultiHeadAttentionWithIndividualFeatures(Module):
                 scores, attn_scores = individual_attention(
                     q, k, v, self.d_k, mask, self.dropout, gammas, score_mask=score_mask
                 )
-        elif self.de_type.startswith("basic"):
+        elif self.de_type.startswith("basic") and diff is not None:
             scores, attn_scores = attention(q, k, v, 
+                                    mask=mask, dropout=self.dropout)
+        elif self.de_type.startswith("relative") and diff is not None:
+            scores, attn_scores = relative_attention(q, k, v, self.l1, self.l2, 
                                     mask=mask, dropout=self.dropout)
         else:
             # calculate attention using function we will define next
@@ -343,6 +349,9 @@ class MultiHeadAttentionWithContextDistance(Module):
             self.rpe = RotaryPositionalEmbeddings(d_model // n_heads, max_len=seq_len)
         if self.de_type.startswith("alibi"):
             self.score = ALiBiPositionalEmbeddings(n_heads, de_type, bincounts=bincounts, max_len=seq_len)
+        if self.de_type.startswith("relative"):
+            self.l1 = Parameter(torch.rand(1))
+            self.l2 = Parameter(torch.rand(1))
             
         xavier_uniform_(self.gammas)
 
@@ -396,6 +405,9 @@ class MultiHeadAttentionWithContextDistance(Module):
                 )
         elif self.de_type.startswith("basic"):
             scores, attn = attention(q, k, v, 
+                                    mask=mask, dropout=self.dropout)
+        elif self.de_type.startswith("relative") and diff is not None:
+            scores, attn = relative_attention(q, k, v, self.l1, self.l2, 
                                     mask=mask, dropout=self.dropout)
         else:
             # calculate attention using function we will define next
@@ -664,6 +676,9 @@ class MultiheadAttention(nn.Module):
             self.rpe = RotaryPositionalEmbeddings(self.d_k, max_len=seq_len-1)
         if self.de_type.startswith("alibi"):
             self.score = ALiBiPositionalEmbeddings(h, de_type, max_len=seq_len-1, bincounts=bincounts)
+        if self.de_type.startswith("relative"):
+            self.l1 = Parameter(torch.rand(1))
+            self.l2 = Parameter(torch.rand(1))
 
     def forward(self, query, key, value, diff=None, response=None, mask=None):
         "Implements Figure 2"
@@ -682,11 +697,13 @@ class MultiheadAttention(nn.Module):
             key = self.rpe(key, diff[:, :-1]) # [batch_size, head, len_k,  head_dim]
             # if "v" in self.de_type :
             #     value = self.rpe(value, diff) # [batch_size, head, len_q,  head_dim]
-
         elif self.de_type.startswith("alibi") and diff is not None:
             # 2) Apply attention on all the projected vectors in batch.
             score_mask = self.score.buffered_future_mask_sakt(query, diff, response)
             x, self.attn = attention(query, key, value, score_mask=score_mask,
+                                    mask=mask, dropout=self.dropout)
+        elif self.de_type.startswith("relative") and diff is not None:
+            x, self.attn = relative_attention(q, k, v, self.l1, self.l2, 
                                     mask=mask, dropout=self.dropout)
         else:
             # 2) Apply attention on all the projected vectors in batch.
@@ -696,3 +713,35 @@ class MultiheadAttention(nn.Module):
         x = x.transpose(1, 2).contiguous() \
             .view(nbatches, -1, self.h * self.d_k)
         return self.linears[-1](x), self.attn
+    
+    
+def relative_attention(query, key, value, l1, l2, mask=None, dropout=None):
+    # rel = rel * mask.to(torch.float) # future masking of correlation matrix.
+    # rel_attn = rel.masked_fill(rel == 0, -10000)
+    # rel_attn = nn.Softmax(dim=-1)(rel_attn)
+    d_k = query.size(-1)
+    scores = torch.matmul(query, key.transpose(-2, -1))
+    scores = scores / math.sqrt(d_k)
+    
+    seqlen = scores.size(2)
+    x1 = torch.arange(seqlen).expand(seqlen, -1)
+    x2 = x1.transpose(0, 1).contiguous()
+    device = scores.get_device()
+    position_effect = torch.abs(x1 - x2)[None, None, :, :].type(
+        torch.FloatTensor
+    )  # [1, 1, seqlen, seqlen]
+    position_effect = position_effect.to(device)
+    position_effect = torch.exp(-torch.abs(position_effect)/l1)
+    
+    if mask is not None:
+        scores = scores.masked_fill(mask == 0, -1e9)
+        position_effect = position_effect.masked_fill(mask == 0, -1e9)
+
+    prob_attn = F.softmax(scores, dim=-1)
+    time_attn = F.softmax(position_effect, dim=-1)
+    prob_attn = l2*prob_attn+(1-l2)*time_attn
+    # prob_attn = F.softmax(prob_attn + rel_attn, dim=-1)
+    # prob_attn = (1-l1)*prob_attn + (l1)*rel_attn
+    if dropout is not None:
+        prob_attn = dropout(prob_attn)
+    return torch.matmul(prob_attn, value), prob_attn
