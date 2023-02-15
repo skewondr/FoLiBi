@@ -149,12 +149,16 @@ class AKT(Module):
                     qr_embed_data += self.diff_emb(diff).float()
                 if "f" in self.choose_enc:
                     f_embed = self.diff_emb(diff).float()
-            # elif self.de.startswith("alibi") and not "1" in self.de:
-            #     posemb = self.position_emb(pos)
-            #     if "q" in self.choose_enc:
-            #         q_embed_data += posemb
-            #     if "i" in self.choose_enc:
-            #         qr_embed_data += posemb
+            elif self.de.startswith("basic"):
+                q_embed_data = (
+                    q_embed_data + pid_embed_data * q_embed_diff_data
+                )  # x_t = c_{c_t} + \mu_{q_t} + d_{c_t}
+                qr_embed_data = qr_embed_data + pid_embed_data * (
+                    qr_embed_diff_data + q_embed_diff_data
+                )
+                posemb = self.position_emb(pos)
+                if "f" in self.choose_enc:
+                    f_embed = posemb
 
             c_reg_loss = torch.mean(pid_embed_data ** 2.0) * self.reg_l
         else:
@@ -310,7 +314,7 @@ class Architecture(Module):
                 # question encoder
                 # x^{\hat}_{t} = f_{enc_1} (x_1, ..., x_t)
                 # x can see both current and past information
-                if idx == 1 and f_embed is not None:
+                if idx >= 1 and f_embed is not None:
                     x = x+f_embed
                 x, _ = block(mask=1, query=x, key=x, values=x, diff=q_enc, response=r, apply_pos=False)
                 flag_first = False
@@ -318,7 +322,7 @@ class Architecture(Module):
                 # knoweldge retriever
                 # h_t = f_{kr} (x^{\hat}_1, ..., x^{\hat}_t, y^{\hat}_1, ..., y^{\hat}_{t-1})
                 # h can see past only
-                if idx == 1 and f_embed is not None:
+                if idx >= 1 and f_embed is not None:
                     x = x+f_embed
                     y = y+f_embed
                 x, attn = block(mask=0, query=x, key=x, values=y, diff=f_enc, response=r, apply_pos=True)
