@@ -81,7 +81,7 @@ def model_train(
                 total_preds.append(pred)
                 total_trues.append(true)
 
-                ## For balanced evaluation
+                """## For balanced evaluation
                 padding_mask = out_dict["true"] > -1 # batch, seq_len 
                 n_samples = padding_mask.sum(1) # batch
                 correct_samples_per_user = (batch['responses'][:, 1:] * padding_mask).sum(1)
@@ -99,26 +99,27 @@ def model_train(
 
                     additional_mask_indices = start_idx + indices[np.random.choice(len(indices), size=torch.abs(difference_user).item(), replace=False)]
                     padding_mask[u][additional_mask_indices] = False
-                    #user에 대하여 groundtruth의 true개수와 false의 개수가 동일하도록 마스킹함. 
+                    #user에 대하여 groundtruth의 true개수와 false의 개수가 동일하도록 마스킹함. """
 
-                pred = out_dict["pred"].flatten()
+                """pred = out_dict["pred"].flatten()
                 true = out_dict["true"].flatten()
                 padding_mask = padding_mask.flatten()
                 pred_balanced = pred[padding_mask]
                 true_balanced = true[padding_mask]            
                 total_preds_balanced.append(pred_balanced)
-                total_trues_balanced.append(true_balanced)
+                total_trues_balanced.append(true_balanced)"""
                     
             total_preds = torch.cat(total_preds).squeeze(-1).detach().cpu().numpy()
             total_trues = torch.cat(total_trues).squeeze(-1).detach().cpu().numpy()
 
-            total_preds_balanced = torch.cat(total_preds_balanced).squeeze(-1).detach().cpu().numpy()
-            total_trues_balanced = torch.cat(total_trues_balanced).squeeze(-1).detach().cpu().numpy()
+            """total_preds_balanced = torch.cat(total_preds_balanced).squeeze(-1).detach().cpu().numpy()
+            total_trues_balanced = torch.cat(total_trues_balanced).squeeze(-1).detach().cpu().numpy()"""
             
 
         train_loss = np.average(train_losses)
         avg_train_losses.append(train_loss)
-        valid_auc_balanced = roc_auc_score(y_true=total_trues_balanced, y_score=total_preds_balanced)
+        valid_auc_balanced = 0
+        """valid_auc_balanced = roc_auc_score(y_true=total_trues_balanced, y_score=total_preds_balanced)"""
         valid_auc = roc_auc_score(y_true=total_trues, y_score=total_preds)
 
         if valid_balanced:
@@ -179,7 +180,7 @@ def model_train(
             total_preds.append(pred)
             total_trues.append(true)
             
-            ## For balanced evaluation
+            """## For balanced evaluation
             padding_mask = out_dict["true"] > -1 ## mask tensor for padding
             n_samples = padding_mask.sum(1)
             correct_samples_per_user = (batch['responses'][:, 1:] * padding_mask).sum(1)
@@ -205,22 +206,25 @@ def model_train(
             pred_balanced = pred[padding_mask]
             true_balanced = true[padding_mask]            
             total_preds_balanced.append(pred_balanced)
-            total_trues_balanced.append(true_balanced)
+            total_trues_balanced.append(true_balanced)"""
 
         total_preds = torch.cat(total_preds).squeeze(-1).detach().cpu().numpy()
         total_trues = torch.cat(total_trues).squeeze(-1).detach().cpu().numpy()
 
-        total_preds_balanced = torch.cat(total_preds_balanced).squeeze(-1).detach().cpu().numpy()
-        total_trues_balanced = torch.cat(total_trues_balanced).squeeze(-1).detach().cpu().numpy()
+        """total_preds_balanced = torch.cat(total_preds_balanced).squeeze(-1).detach().cpu().numpy()
+        total_trues_balanced = torch.cat(total_trues_balanced).squeeze(-1).detach().cpu().numpy()"""
 
     auc = roc_auc_score(y_true=total_trues, y_score=total_preds)
     acc = accuracy_score(y_true=total_trues >= 0.5, y_pred=total_preds >= 0.5)
     rmse = np.sqrt(mean_squared_error(y_true=total_trues, y_pred=total_preds))
 
-    auc_balanced = roc_auc_score(y_true=total_trues_balanced, y_score=total_preds_balanced)
+    """auc_balanced = roc_auc_score(y_true=total_trues_balanced, y_score=total_preds_balanced)
     acc_balanced = accuracy_score(y_true=total_trues_balanced >= 0.5, y_pred=total_preds_balanced >= 0.5)
-    rmse_balanced = np.sqrt(mean_squared_error(y_true=total_trues_balanced, y_pred=total_preds_balanced))
-
+    rmse_balanced = np.sqrt(mean_squared_error(y_true=total_trues_balanced, y_pred=total_preds_balanced))"""
+    auc_balanced=0
+    acc_balanced=0
+    rmse_balanced=0
+    
     sw = np.where(total_trues == 1, 1-sum(total_trues)/len(total_trues), sum(total_trues)/len(total_trues))
     auc_weighted = roc_auc_score(y_true=total_trues, y_score=total_preds, sample_weight=sw)
     acc_weighted = accuracy_score(y_true=total_trues >= 0.5, y_pred=total_preds >= 0.5, sample_weight=sw)
@@ -229,7 +233,7 @@ def model_train(
     print(f"[ORIGINAL] Best Model\tTEST AUC: {auc:.4f}\tTEST ACC: {acc:.4f}\tTEST RMSE: {rmse:.4f}")
     print(f"[BALANCED] Best Model\tTEST AUC: {auc_balanced:.4f}\tTEST ACC: {acc_balanced:.4f}\tTEST RMSE: {rmse_balanced:.4f}")
     print(f"[WEIGHTED] Best Model\tTEST AUC: {auc_weighted:.4f}\tTEST ACC: {acc_weighted:.4f}\tTEST RMSE: {rmse_weighted:.4f}")
-    print(f"Under sampling ratio: {100*(total_preds_balanced.shape[0]/total_preds.shape[0]):.2f}%")
+    # print(f"Under sampling ratio: {100*(total_preds_balanced.shape[0]/total_preds.shape[0]):.2f}%")
     
     return [auc, acc, rmse, auc_balanced, acc_balanced, rmse_balanced, auc_weighted, acc_weighted, rmse_weighted]
         
