@@ -154,15 +154,6 @@ class CL4KT(Module):
                         inter_i_embed += self.diff_emb(diff_i).float()
                         inter_j_embed += self.diff_emb(diff_j).float()
                         inter_k_embed += self.diff_emb(diff).float()
-                # elif self.de.startswith("alibi") and not "1" in self.de:
-                #     posemb = self.position_emb(pos)
-                #     if "q" in self.choose_enc:
-                #         ques_i_embed += posemb
-                #         ques_j_embed += posemb
-                #     if "i" in self.choose_enc:
-                #         inter_i_embed += posemb
-                #         inter_j_embed += posemb
-                #         inter_k_embed += posemb
                     
                 q_i_enc, q_j_enc = None, None
                 i_i_enc, i_j_enc, i_k_enc = None, None, None   
@@ -309,12 +300,10 @@ class CL4KT(Module):
                 i_embed += self.diff_emb(diff).float()
             if "f" in self.choose_enc:
                 f_embed = self.diff_emb(diff).float()
-        # elif self.de.startswith("alibi") and not "1" in self.de:
-        #     posemb = self.position_emb(pos)
-        #     if "q" in self.choose_enc:
-        #         q_embed += posemb
-        #     if "i" in self.choose_enc:
-        #         i_embed += posemb
+        elif self.de.startswith("basic"):
+            posemb = self.position_emb(pos)
+            if "f" in self.choose_enc:
+                f_embed = posemb
             
         q_enc = None
         i_enc = None 

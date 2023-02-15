@@ -147,12 +147,6 @@ class RDEMKT(Module):
                         ques_i_embed += self.diff_emb(diff).float()
                     if "i" in self.choose_enc:
                         inter_i_embed += self.diff_emb(diff).float()
-                # elif self.de.startswith("alibi") and not "1" in self.de:
-                #     posemb = self.position_emb(pos)
-                #     if "q" in self.choose_enc:
-                #         ques_i_embed += posemb
-                #     if "i" in self.choose_enc:
-                #         inter_i_embed += posemb
 
                 q_enc = None
                 i_enc = None
@@ -223,12 +217,10 @@ class RDEMKT(Module):
                 i_embed += self.diff_emb(diff).float()
             if "f" in self.choose_enc:
                 f_embed = self.diff_emb(diff).float()
-        # elif self.de.startswith("alibi") and not "1" in self.de:
-        #     posemb = self.position_emb(pos)
-        #     if "q" in self.choose_enc:
-        #         q_embed += posemb
-        #     if "i" in self.choose_enc:
-        #         i_embed += posemb
+        elif self.de.startswith("basic"):
+            posemb = self.position_emb(pos)
+            if "f" in self.choose_enc:
+                f_embed = posemb
                 
         q_enc = None
         i_enc = None 
