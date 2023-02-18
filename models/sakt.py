@@ -54,7 +54,7 @@ class SAKT(Module):
         if self.de.startswith(("sde", "random", "alibi-sde", "rotary-sde")):
             qshftemb += self.diff_emb(diff[:, 1:]).float()
             xemb += self.diff_emb(diff[:, :-1]).float()
-        if self.de.startswith(("none", "sde", "random")):
+        if self.de.startswith(("basic", "sde", "random")):
             #alibi를 제외하면, position 정보가 들어가야 함. 
             posemb = self.position_emb(pos)
             xemb = xemb + posemb
