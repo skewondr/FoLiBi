@@ -403,7 +403,7 @@ class MultiHeadAttentionWithContextDistance(Module):
                 scores, attn = monotonic_attention(
                     q, k, v, self.d_k, mask, self.dropout, gammas, score_mask=score_mask
                 )
-        elif self.de_type.startswith("basic"):
+        elif self.de_type.startswith("basic") and diff is not None:
             scores, attn = attention(q, k, v, 
                                     mask=mask, dropout=self.dropout)
         elif self.de_type.startswith("relative") and diff is not None:

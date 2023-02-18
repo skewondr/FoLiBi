@@ -135,30 +135,24 @@ class AKT(Module):
             q_embed_diff_data = self.q_embed_diff(q)  # d_{c_t}: variation vector
             pid_embed_data = self.difficult_param(pid_data)  # \mu_{q_t}
             qr_embed_diff_data = self.qr_embed_diff(qr)  # f_{(c_t, r_t)} or h_{r_t}
-            if self.de.startswith("none"):
-                q_embed_data = (
-                    q_embed_data + pid_embed_data * q_embed_diff_data
-                )  # x_t = c_{c_t} + \mu_{q_t} + d_{c_t}
-                qr_embed_data = qr_embed_data + pid_embed_data * (
-                    qr_embed_diff_data + q_embed_diff_data
-                )
-            elif self.de.startswith(("sde", "random", "alibi-sde", "rotary-sde")):
+            if self.de.startswith(("sde", "random", "alibi-sde", "rotary-sde")):
                 if "q" in self.choose_enc:
                     q_embed_data += self.diff_emb(diff).float()
                 if "i" in self.choose_enc:
                     qr_embed_data += self.diff_emb(diff).float()
                 if "f" in self.choose_enc:
                     f_embed = self.diff_emb(diff).float()
-            elif self.de.startswith("basic"):
+            else:
                 q_embed_data = (
                     q_embed_data + pid_embed_data * q_embed_diff_data
                 )  # x_t = c_{c_t} + \mu_{q_t} + d_{c_t}
                 qr_embed_data = qr_embed_data + pid_embed_data * (
                     qr_embed_diff_data + q_embed_diff_data
                 )
-                posemb = self.position_emb(pos)
-                if "f" in self.choose_enc:
-                    f_embed = posemb
+                if self.de.startswith("basic"):
+                    posemb = self.position_emb(pos)
+                    if "f" in self.choose_enc:
+                        f_embed = posemb
 
             c_reg_loss = torch.mean(pid_embed_data ** 2.0) * self.reg_l
         else:
