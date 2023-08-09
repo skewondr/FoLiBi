@@ -1,23 +1,17 @@
-![performance_table](https://user-images.githubusercontent.com/55173544/210480097-a378b009-2f9d-4610-9b22-d73240572f34.PNG)
+![**image**](https://github.com/skewondr/FoLiBi/assets/55173544/82c405fb-bd4f-4677-873c-60ac39c383f1)
 
-
-
-
-
-#### 모든 모델,데이터별 hyper-parameter는 configs/example_opt.yaml을 확인하세요. 
-
-## 1.  제안 모델 성능확인  
 ```
-#RDEMKT
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name rdemkt --data_name algebra05 --use_wandb 0
-#RDEKT
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name rdemkt --data_name algebra05 --use_wandb 0 --only_rp 1
-```     
+### pip install accelerate einops yacs iopath
 
-## 2. 다른 KT 모델들 성능 확인 
-```
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name sakt --data_name algebra05  --use_wandb 0
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name akt --data_name algebra05  --use_wandb 0
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name saint --data_name algebra05  --use_wandb 0
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name cl4kt --data_name algebra05  --use_wandb 0
+### execute baselines 
+CUDA_VISIBLE_DEVICES=0 python main.py --seed 12405 --model_name sakt --data_name algebra05 --de_type none_0 --gpu_num 0 --server_num 0 --describe baselines
+
+### execute rc 
+CUDA_VISIBLE_DEVICES=0 python main.py --seed 12405 --model_name sakt --data_name algebra05 --de_type relative_0 --gpu_num 0 --server_num 0 --describe rc
+
+### execute mono
+CUDA_VISIBLE_DEVICES=0 python main.py --seed 12405 --model_name sakt --data_name algebra05 --de_type monotonic_0 --gpu_num 0 --server_num 0 --describe mono
+
+### execute alibi
+CUDA_VISIBLE_DEVICES=0 python main.py --seed 12405 --model_name sakt --data_name algebra05 --de_type alibi1_0 --gpu_num 0 --server_num 0 --describe alibi
 ```
