@@ -231,8 +231,8 @@ def model_train(
     rmse_weighted = np.sqrt(mean_squared_error(y_true=total_trues, y_pred=total_preds, sample_weight=sw))
 
     print(f"[ORIGINAL] Best Model\tTEST AUC: {auc:.4f}\tTEST ACC: {acc:.4f}\tTEST RMSE: {rmse:.4f}")
-    print(f"[BALANCED] Best Model\tTEST AUC: {auc_balanced:.4f}\tTEST ACC: {acc_balanced:.4f}\tTEST RMSE: {rmse_balanced:.4f}")
-    print(f"[WEIGHTED] Best Model\tTEST AUC: {auc_weighted:.4f}\tTEST ACC: {acc_weighted:.4f}\tTEST RMSE: {rmse_weighted:.4f}")
+    # print(f"[BALANCED] Best Model\tTEST AUC: {auc_balanced:.4f}\tTEST ACC: {acc_balanced:.4f}\tTEST RMSE: {rmse_balanced:.4f}")
+    # print(f"[WEIGHTED] Best Model\tTEST AUC: {auc_weighted:.4f}\tTEST ACC: {acc_weighted:.4f}\tTEST RMSE: {rmse_weighted:.4f}")
     # print(f"Under sampling ratio: {100*(total_preds_balanced.shape[0]/total_preds.shape[0]):.2f}%")
     
     return [auc, acc, rmse, auc_balanced, acc_balanced, rmse_balanced, auc_weighted, acc_weighted, rmse_weighted]

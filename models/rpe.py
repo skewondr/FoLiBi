@@ -309,51 +309,6 @@ class ALiBiPositionalEmbeddings(nn.Module):
         if "1" in self.de and diff is not None:
             """서로 먼 위치의 attention score의 영향력을 상대적으로 낮게 부여."""
             _future_mask = _future_mask + self.alibi.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) #(1, 1, max_len, max_len) + (batch_size, attn_heads, 1, max_len) 
-        if "2" in self.de and diff is not None:
-            """어려운 난이도의 attention score의 영향력을 상대적으로 높게 부여"""
-            x1 = diff1.unsqueeze(-1).expand(-1, -1, self.max_len)
-            x2 = diff2.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
-            diff_effect = torch.squeeze((self.token_num+1)-x2[None, None, :, :].type(torch.FloatTensor))  # [1, 1, seqlen, seqlen]
-            diff_effect = diff_effect.float().to(tensor.get_device())
-            # [batch_size, 8, seqlen, seqlen] positive distance
-            # dist_score => d(t, tau)
-            # diff_effect -= torch.diag(torch.ones(self.max_len)*(self.token_num+1)) #batch_size, max_len, max+len 
-            _scores = torch.where(diff_effect>(self.token_num+1)*0.5, diff_effect.double(), 0.).to(tensor.get_device())
-            _scores = _scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
-            _scores = _scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
-            _future_mask = _future_mask + _scores #batch_size*attn_heads, max_len, max_len 
-        if "3" in self.de and diff is not None:
-            """정답인 경우, 정답률이 낮을수록 높은 가중치. 오답인 경우, 정답률이 높을수록 높은 가중치"""
-            diff_ox = torch.where(response==1 , (self.token_num+1) - diff2 * (response > -1).int(), diff2 * (response > -1).long())  
-            x2 = diff_ox.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
-            diff_effect = x2.float()
-            diff_effect = diff_effect * (torch.ones(self.max_len, self.max_len) - torch.eye(self.max_len, self.max_len)).unsqueeze(0)
-            # diff_effect /= diff_effect.norm(dim=0, keepdim=True)
-            # [batch_size, 8, seqlen, seqlen] positive distance
-            # dist_score => d(t, tau)
-            _scores = torch.where(diff_effect>(self.token_num+1)*0.5, diff_effect.double(), 0.).to(tensor.get_device())
-            _scores = _scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
-            _scores = _scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
-            _future_mask = _future_mask + _scores #batch_size, attn_heads, max_len, max_len 
-        if "4" in self.de and diff is not None:
-            """동일한 concept 문제에 대하여 반복 횟수가 높을수록"""
-            x1 = diff1.unsqueeze(-1).expand(-1, -1, self.max_len)
-            x2 = diff2.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
-            diff_effect = torch.cumsum((x1 == x2).int(), dim=-1)*(x1 == x2).int()
-            _scores = torch.where(diff_effect>self.max_len*0.1, diff_effect.double(), 0.).to(tensor.get_device())
-            _scores = _scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
-            _scores = _scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
-            _future_mask = _future_mask + _scores #batch_size*attn_heads, max_len, max_len 
-        if "5" in self.de and diff is not None:
-            """동일한 concept 문제에 대하여 맞힐 경우 (0,1)"""
-            x1 = diff1.unsqueeze(-1).expand(-1, -1, self.max_len)
-            x2 = diff2.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
-            r = response.unsqueeze(-1).expand(-1, -1, self.max_len).transpose(-1, -2).contiguous()
-            diff_effect = (x1 == x2).int()*(r == 1).int() #(batch, max_len, max_len)  
-            _scores = diff_effect * (torch.ones(self.max_len, self.max_len) - torch.eye(self.max_len, self.max_len)).unsqueeze(0)
-            _scores = _scores.unsqueeze(1).repeat(1, self.attn_heads, 1, 1)  # batch_size, attn_heads, 1, max_len
-            _scores = _scores*self.slopes.unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1) 
-            _future_mask = _future_mask + _scores #batch_size, attn_heads, max_len, max_len 
             
         cnt_applied = len(set('12345') & set(self.de))
         _future_mask = (_future_mask / cnt_applied).to(tensor.device)

@@ -1,28 +1,14 @@
-# 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
-server=25
-gpu=0
+# pip install accelerate einops yacs iopath
 
-for data_name in slepemapy
-do
-    for model_name in akt
-    do
-        for de_type in None LSDE_ LRDE_ LRDE RDE
-        do
-            if [ $de_type = None ]
-            then
-                CUDA_VISIBLE_DEVICES=${gpu} python main.py --model_name $model_name --data_name $data_name --de_type ${de_type}_0 --gpu_num ${gpu} --server_num ${server}
-            elif [ $de_type = LRDE ]
-            then
-                CUDA_VISIBLE_DEVICES=${gpu} python main.py --model_name $model_name --data_name $data_name --de_type ${de_type}_1000 --gpu_num ${gpu} --server_num ${server}
-            elif [ $de_type = RDE ]
-            then
-                CUDA_VISIBLE_DEVICES=${gpu} python main.py --model_name $model_name --data_name $data_name --de_type ${de_type}_1000 --gpu_num ${gpu} --server_num ${server}
-            else
-                for k in 1 2 5 10 25 50 100
-                do
-                    python main.py --model_name $model_name --data_name $data_name --de_type ${de_type}${k} --gpu_num ${gpu} --server_num ${server}
-                done
-            fi
-        done
-    done
-done
+# execute baselines 
+CUDA_VISIBLE_DEVICES=0 python main.py --seed 12405 --model_name sakt --data_name algebra05 --de_type none_0 --gpu_num 0 --server_num 0 --describe baselines
+
+# execute rc 
+CUDA_VISIBLE_DEVICES=0 python main.py --seed 12405 --model_name sakt --data_name algebra05 --de_type relative_0 --gpu_num 0 --server_num 0 --describe baselines
+
+# execute mono
+CUDA_VISIBLE_DEVICES=0 python main.py --seed 12405 --model_name sakt --data_name algebra05 --de_type monotonic_0 --gpu_num 0 --server_num 0 --describe baselines
+
+# execute alibi
+CUDA_VISIBLE_DEVICES=0 python main.py --seed 12405 --model_name sakt --data_name algebra05 --de_type alibi1_0 --gpu_num 0 --server_num 0 --describe baselines
+

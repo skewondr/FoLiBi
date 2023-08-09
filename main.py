@@ -16,9 +16,7 @@ from data_loaders import (
 )
 from models.akt import AKT
 from models.sakt import SAKT
-from models.saint import SAINT
 from models.cl4kt import CL4KT
-from models.rdemkt import RDEMKT
 from train import model_train
 from sklearn.model_selection import KFold
 from datetime import datetime, timedelta
@@ -170,13 +168,6 @@ def main(config):
         elif args.model_name == "sakt":
             model_config = config.sakt_config
             model = SAKT(device, num_skills, num_questions, seq_len, train_bincounts, **model_config)
-        elif args.model_name == "saint":
-            model_config = config.saint_config
-            model = SAINT(device, num_skills, num_questions, seq_len, **model_config)
-        elif model_name == "rdemkt":
-            model_config = config.rdemkt_config
-            model = RDEMKT(device, num_skills, num_questions, seq_len, train_bincounts, **model_config)
-            mask_prob = model_config.mask_prob
 
         dir_name = os.path.join("saved_model", model_name, data_name, params_str)
         if not os.path.exists(dir_name):
@@ -220,20 +211,6 @@ def main(config):
                         test_dataset, seq_len, 0, 0, 0, 0, 0, eval_mode=True
                     ),
                     batch_size=eval_batch_size,
-                )
-            )
-
-        elif model_name == "rdemkt":   
-            train_loader = accelerator.prepare(
-                DataLoader(
-                    MKMDatasetWrapper(
-                        diff_order,
-                        train_dataset,
-                        seq_len,
-                        mask_prob,
-                        eval_mode=False,
-                    ),
-                    batch_size=batch_size,
                 )
             )
 
@@ -381,7 +358,7 @@ if __name__ == "__main__":
         "--diff_order", type=str, default="random", help="random/des/asc/chunk"
     )
     parser.add_argument(
-        "--use_wandb", type=int, default=1
+        "--use_wandb", type=int, default=0
     )
     parser.add_argument("--l2", type=float, default=0.0, help="l2 regularization param")
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
@@ -443,13 +420,6 @@ if __name__ == "__main__":
         cfg.akt_config = cfg.akt_config[cfg.data_name]
     #     cfg.akt_config.l2 = args.l2
     #     cfg.akt_config.dropout = args.dropout
-    elif args.model_name == "rdemkt":
-        cfg.rdemkt_config = cfg.rdemkt_config[cfg.data_name]
-        cfg.rdemkt_config.only_rp = 1
-        # cfg.mkt_config.choose_cl = args.choose_cl
-        # cfg.mkt_config.inter_lambda = args.inter_lambda
-        # cfg.mkt_config.ques_lambda = args.ques_lambda
-        # cfg.mkt_config.mask_prob = args.mask_prob
     
     cfg[f"{args.model_name}_config"].de_type =  args.de_type
     cfg[f"{args.model_name}_config"].choose_enc =  args.choose_enc
