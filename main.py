@@ -382,7 +382,7 @@ if __name__ == "__main__":
     parser.add_argument("--seq_len",  type=int, default=100, help="max sequence length")
     args = parser.parse_args()
 
-    base_cfg_file = PathManager.open("configs/example_opt.yaml", "r")
+    base_cfg_file = PathManager.open("configs/opt.yaml", "r")
     base_cfg = yaml.safe_load(base_cfg_file)
     cfg = CN(base_cfg)
     cfg.set_new_allowed(True)
